@@ -1,2 +1,2 @@
 # IF-learn
-Meta-learners for machine learning based statistical inference on structural target functions, such as conditional average treatment effects, using influence functions
+Learning algorithms for machine learning based estimation and inference on structural target functions, such as conditional average treatment effects, using influence functions.
