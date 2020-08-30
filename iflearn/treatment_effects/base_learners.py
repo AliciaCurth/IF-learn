@@ -6,6 +6,7 @@ Module contains base learners for treatment effect estimation, namely
 - IF-learners (also known as DR-learners)
 - Their Oracle versions
 """
+import abc
 import numpy as np
 import warnings
 
@@ -16,22 +17,23 @@ from ..utils.base import clone
 from .base import CATE_NAME, _get_po_function, _get_te_eif
 
 
-class BaseTEModel(BaseEstimator, RegressorMixin):
+class BaseTEModel(BaseEstimator, RegressorMixin, abc.ABC):
     """
     Base class for treatment effect models
     """
-
     def __init__(self):
         pass
 
     def score(self, X, y, sample_weight=None):
         pass
 
+    @abc.abstractmethod
     def fit(self, X, y, w, p=None):
-        raise NotImplementedError("All TE models must implement their own fit method")
+        pass
 
+    @abc.abstractmethod
     def predict(self, X, return_po=False):
-        raise NotImplementedError("All TE models must implement their own predict method")
+        pass
 
 
 class PlugInTELearner(BaseTEModel):
@@ -72,7 +74,7 @@ class PlugInTELearner(BaseTEModel):
 class IFLearnerTE(BaseTEModel):
     def __init__(self, te_estimator, base_estimator=None, propensity_estimator=None,
                  double_sample_split=False, setting=CATE_NAME, binary=False,
-                 fit_base_model=False, base_ensemble=False,
+                 fit_base_model=False, fit_propensity_model=False,
                  n_folds=10, random_state=42):
 
         # set estimators
@@ -91,12 +93,12 @@ class IFLearnerTE(BaseTEModel):
         # set other arguments
         self.setting = setting
         self.fit_base_model = fit_base_model
-        self.base_ensemble = base_ensemble
         self.n_folds = n_folds
         self.random_state = random_state
         self.binary = binary
 
-        # TODO add po_capabilities
+        # TODO add selection bias
+        self.fit_propensity_model = fit_propensity_model
         self.double_sample_split = double_sample_split
         self.propensity_estimator = propensity_estimator
 
@@ -123,18 +125,16 @@ class IFLearnerTE(BaseTEModel):
         temp_model_1 = clone(self.base_estimator)
         temp_model_1.fit(X_fit[W_fit == 1], Y_fit[W_fit == 1])
 
-        if self.fit_base_model and self.base_ensemble:
-            self._models_0.append(temp_model_0)
-            self._models_1.append(temp_model_1)
-
         if self.binary:
             mu_0_pred = temp_model_0.predict_proba(X[pred_mask, :])
             mu_1_pred = temp_model_1.predict_proba(X[pred_mask, :])
         else:
             mu_0_pred = temp_model_0.predict(X[pred_mask, :])
             mu_1_pred = temp_model_1.predict(X[pred_mask, :])
-
-        return mu_0_pred, mu_1_pred
+        if not self.fit_propensity_model:
+            return mu_0_pred, mu_1_pred
+        else:
+            raise NotImplementedError('Estimation of propensity scores not yet implemented')
 
     def _bias_correction_step(self, X, y, w, p, mu_0, mu_1):
         # create transformed outcome based on efficient influence function
@@ -166,11 +166,6 @@ class IFLearnerTE(BaseTEModel):
             splitter = StratifiedKFold(n_splits=self.n_folds, shuffle=True,
                                        random_state=self.random_state)
 
-            if self.fit_base_model and self.base_ensemble:
-                # collect fold-wise models
-                self._models_0 = []
-                self._models_1 = []
-
             for train_index, test_index in splitter.split(X, w):
                 # create masks
                 pred_mask = np.zeros(n, dtype=bool)
@@ -184,7 +179,7 @@ class IFLearnerTE(BaseTEModel):
         # STEP 2: bias correction
         self._bias_correction_step(X, y, w, p, mu_0_pred, mu_1_pred)
 
-        if self.fit_base_model and not self.base_ensemble:
+        if self.fit_base_model:
             # also fit a single baseline model to return PO predictions later
             self._plug_in_0.fit(X[w == 0], y[w == 0])
             self._plug_in_1.fit(X[w == 1], y[w == 1])
@@ -196,40 +191,12 @@ class IFLearnerTE(BaseTEModel):
                 raise ValueError("Cannot return potential outcomes when no base-model is fit")
             else:
                 te = self.te_estimator.predict(X)
-                if self.base_ensemble:
-                    # give an ensembled prediction over all model folds
-                    preds_0 = None
-                    preds_1 = None
-                    for i in range(self.n_folds):
-                        model_0 = self._models_0[i]
-                        model_1 = self._models_1[i]
-                        # make predictions
-                        if self.binary:
-                            preds_m_0 = model_0.predict_proba(X)
-                            preds_m_1 = model_1.predict_proba(X)
-                        else:
-                            preds_m_0 = model_0.predict(X)
-                            preds_m_1 = model_1.predict(X)
-
-                        # add to stack
-                        if preds_0 is None:
-                            preds_0 = preds_m_0
-                            preds_1 = preds_m_1
-                        else:
-                            preds_0 = np.dstack((preds_0, preds_m_0))
-                            preds_1 = np.dstack((preds_1, preds_m_1))
-
-                    # average
-                    y_0 = np.mean(preds_0, axis=2).reshape((-1))
-                    y_1 = np.mean(preds_1, axis=2).reshape((-1))
-
-                else:  # use base te_estimator trained on full sample
-                    if self.binary:
-                        y_0 = self._plug_in_0.predict_proba(X)
-                        y_1 = self._plug_in_1.predict_proba(X)
-                    else:
-                        y_0 = self._plug_in_0.predict(X)
-                        y_1 = self._plug_in_1.predict(X)
+                if self.binary:
+                    y_0 = self._plug_in_0.predict_proba(X)
+                    y_1 = self._plug_in_1.predict_proba(X)
+                else:
+                    y_0 = self._plug_in_0.predict(X)
+                    y_1 = self._plug_in_1.predict(X)
                 return te, y_0, y_1
         else:
             # return only
@@ -256,55 +223,6 @@ class TEOracle(BaseTEModel):
         if return_po:
             mu_0 = self.base_model(X)
             return te, mu_0, mu_0 + te
-        else:
-            return te
-
-
-class PlugInTEOracle(BaseTEModel):
-    """
-    Class to estimate IF using T-learner first stage
-    """
-
-    def __init__(self, te_model, base_model, base_estimator, setting=CATE_NAME,
-                 binary=False):
-
-        # set params
-        self.base_estimator = base_estimator
-        self.te_model = te_model
-        self.base_model = base_model
-        self.setting = setting
-        self.binary = binary
-
-    def _prepare_self(self):
-        self._plug_in_0 = clone(self.base_estimator)
-        self._plug_in_1 = clone(self.base_estimator)
-
-        # set potential outcome function
-        self._po_function = _get_po_function(self.setting, binary=self.binary)
-
-    def fit(self, X, y, w, p=None):
-        self._prepare_self()
-
-        # create pseudo outcome
-        mu_0 = self.base_model(X)
-        mu_1 = mu_0 + self.te_model(X)
-
-        # fit pseudo model
-        self._plug_in_1.fit(X, mu_0)
-        self._plug_in_0.fit(X, mu_1)
-
-    def predict(self, X, return_po=False):
-        if self.binary:
-            mu_0 = self._plug_in_0.predict_proba(X)
-            mu_1 = self._plug_in_1.predict_proba(X)
-        else:
-            mu_0 = self._plug_in_0.predict(X)
-            mu_1 = self._plug_in_1.predict(X)
-
-        te = self._po_function(mu_0=mu_0, mu_1=mu_1)
-
-        if return_po:
-            return te, mu_0, mu_1
         else:
             return te
 
