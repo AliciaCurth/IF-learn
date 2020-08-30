@@ -1,10 +1,10 @@
 """
 Author: Alicia Curth
-
-Module contains base learners for treatment effect estimation, namely
-- Plug-in learners (also known as T-learners)
-- IF-learners (also known as DR-learners)
-- Their Oracle versions
+Module contains base learners for treatment effect estimation (as described in Curth, Alaa and
+van der Schaar (2020), namely
+- Plug-in learners (also known as T-learners in the CATE setting)
+- IF-learners (also known as DR-learners in the CATE setting)
+- Oracle estimators
 """
 import abc
 import numpy as np
@@ -214,7 +214,7 @@ class TEOracle(BaseTEModel):
         self.te_model = te_model
         self.base_model = base_model
 
-    def fit(self, X, y, W, p=None):
+    def fit(self, X, y, w, p=None):
         # placeholder to fit syntax
         pass
 

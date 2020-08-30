@@ -131,7 +131,6 @@ def test_model_constructors():
     if_learner2 = IFLearnerTE(te_estimator=LinearGAM(), base_estimator=None)
 
 
-
 def test_te_oracles():
     # get data without noise
     X, y, w, ite, p, bs = make_te_data(noise=False)
@@ -237,8 +236,3 @@ def test_if_learner():
                              binary=True, setting=RR_NAME, fit_base_model=True)
     if_learner.fit(X, y, w, p)
     te, mu_0, mu_1 = if_learner.predict(X, return_po=True)
-
-
-
-if __name__ == '__main__':
-    test_if_learner()
