@@ -131,6 +131,7 @@ class IFLearnerTE(BaseTEModel):
         else:
             mu_0_pred = temp_model_0.predict(X[pred_mask, :])
             mu_1_pred = temp_model_1.predict(X[pred_mask, :])
+
         if not self.fit_propensity_model:
             return mu_0_pred, mu_1_pred
         else:

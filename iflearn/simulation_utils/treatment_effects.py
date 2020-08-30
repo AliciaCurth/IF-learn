@@ -13,7 +13,7 @@ def make_te_data(n: int = 1000, d: int = 1, setting=CATE_NAME, covariate_model=N
                  binary=False, te_model=None,
                  propensity_model=None,
                  baseline_model=None, noise=True, error_model=None,
-                 selection_bias=None, seedy=None):
+                 selection_bias=None, seedy=42):
     """
     Simulate data for treatment effect estimation
 
