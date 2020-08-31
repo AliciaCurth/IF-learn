@@ -14,7 +14,7 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.base import BaseEstimator, RegressorMixin
 
 from ..utils.base import clone
-from .base import CATE_NAME, _get_po_function, _get_te_eif
+from .base import CATE_NAME, _get_po_plugin_function, _get_te_eif
 
 
 class BaseTEModel(BaseEstimator, RegressorMixin, abc.ABC):
@@ -38,7 +38,9 @@ class BaseTEModel(BaseEstimator, RegressorMixin, abc.ABC):
 
 class PlugInTELearner(BaseTEModel):
     """
-    Class for Plug-in estimation of treatment effects.
+    Class for Plug-in estimation of treatment effects.  For the CATE setting, this estimator is also
+    known as the T-learner.
+
 
     Parameters
     ----------
@@ -62,7 +64,7 @@ class PlugInTELearner(BaseTEModel):
         self._plug_in_1 = clone(self.base_estimator)
 
         # set potential outcome function
-        self._po_function = _get_po_function(self.setting, self.binary_y)
+        self._po_function = _get_po_plugin_function(self.setting, self.binary_y)
 
     def fit(self, X, y, w, p=None):
         """
@@ -120,7 +122,8 @@ class PlugInTELearner(BaseTEModel):
 class IFLearnerTE(BaseTEModel):
     """
     Class implementing the IF-learner of Curth, Alaa and van der Schaar (2020) for the special
-    case of treatment effect estimation.
+    case of treatment effect estimation. For the CATE setting, this estimator is also known as
+    the DR-learner (Doubly robust learner).
 
     Parameters
     ----------

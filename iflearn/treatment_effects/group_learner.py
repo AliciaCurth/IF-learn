@@ -221,22 +221,21 @@ class GroupIFLearner(IFLearnerTE):
         self._taus = res.params[:self.n_groups]
 
     def predict(self, X, return_po=False):
-        def predict(self, X, return_po=False):
-            """
-            Get group-wise treatment effects for new set of data
+        """
+        Get group-wise treatment effects for new set of data
 
-            Parameters
-            ----------
-            X: array-like of shape (n_samples, n_features)
-                Test-sample features
-            return_po: bool, default False
-                Whether to return potential outcome predictions
+        Parameters
+        ----------
+        X: array-like of shape (n_samples, n_features)
+            Test-sample features
+        return_po: bool, default False
+            Whether to return potential outcome predictions
 
-            Returns
-            -------
-            te_est: array-like of shape (n_samples,)
-                Predicted treatment effects
-            """
+        Returns
+        -------
+        te_est: array-like of shape (n_samples,)
+            Predicted treatment effects
+        """
         if return_po:
             raise NotImplementedError('Group-IF-Learners have no po-model')
 
@@ -290,11 +289,11 @@ def rr_from_means(y, w, p):
     Parameters
     ----------
     y : array-like of shape (n_samples,) or (n_samples, )
-            The outcome variable
+        The observed outcome variable
     w: array-like of shape (n_samples,)
-            The treatment indicator
+        The observed treatment indicator
     p: array-like of shape (n_samples,)
-            The treatment propensity
+        The treatment propensity, estimated or known. Can be None, then p=0.5 is assumed
 
     Returns
     -------

@@ -6,8 +6,8 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from iflearn.treatment_effects.base import _get_po_function, _get_te_eif, \
-    eif_transformation_CATE, eif_transformation_RR, po_function_CATE, po_function_RR, CATE_NAME, \
+from iflearn.treatment_effects.base import _get_po_plugin_function, _get_te_eif, \
+    eif_transformation_CATE, eif_transformation_RR, po_plugin_function_CATE, po_plugin_function_RR, CATE_NAME, \
     RR_NAME, ht_te_transformation
 
 
@@ -21,23 +21,23 @@ def test_settingscheck_eif_po():
         _get_te_eif(notcallable)
 
     with pytest.raises(ValueError):
-        _get_po_function('nonsense')
+        _get_po_plugin_function('nonsense')
 
     with pytest.raises(ValueError):
-        _get_po_function(notcallable)
+        _get_po_plugin_function(notcallable)
 
-    assert _get_po_function(RR_NAME) == po_function_RR
-    assert _get_po_function(CATE_NAME) == po_function_CATE
+    assert _get_po_plugin_function(RR_NAME) == po_plugin_function_RR
+    assert _get_po_plugin_function(CATE_NAME) == po_plugin_function_CATE
     assert _get_te_eif(RR_NAME) == eif_transformation_RR
     assert _get_te_eif(CATE_NAME) == eif_transformation_CATE
 
     # test that we can pass down a function
-    po_func = _get_po_function(po_function_RR)
+    po_func = _get_po_plugin_function(po_plugin_function_RR)
     eif_func = _get_te_eif(eif_transformation_RR)
 
     # test that warning is raised
     with pytest.warns(UserWarning):
-        _get_po_function(RR_NAME, binary=False)
+        _get_po_plugin_function(RR_NAME, binary=False)
 
     with pytest.warns(UserWarning):
         _get_te_eif(RR_NAME, binary=False)
@@ -50,9 +50,9 @@ def test_po_functions():
     rr_true = np.array([2, 1, 2 / 3])
     cate_true = np.array([1, 0, -1])
 
-    cate_test = po_function_CATE(mu_0, mu_1)
+    cate_test = po_plugin_function_CATE(mu_0, mu_1)
     np.testing.assert_almost_equal(cate_test, cate_true)
-    rr_test = po_function_RR(mu_0, mu_1)
+    rr_test = po_plugin_function_RR(mu_0, mu_1)
     np.testing.assert_almost_equal(rr_test, rr_true)
 
 

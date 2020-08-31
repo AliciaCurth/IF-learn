@@ -1,5 +1,6 @@
 """
 Author: Alicia Curth
+Module implements general utils
 """
 import copy
 from pygam.terms import TermList

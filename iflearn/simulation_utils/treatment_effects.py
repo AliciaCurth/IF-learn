@@ -5,7 +5,7 @@ Simulation utils for treatment effect estimation simulations
 import numpy as np
 
 from .base import BASE_BASELINE_MODEL, BASE_COVARIATE_MODEL, BASE_ERROR_MODEL, constant_baseline
-from ..treatment_effects.base import _get_po_function, CATE_NAME
+from ..treatment_effects.base import _get_po_plugin_function, CATE_NAME
 BASE_TE_MODEL = constant_baseline
 
 
@@ -97,7 +97,7 @@ def make_te_data(n: int = 1000, d: int = 1, setting=CATE_NAME, covariate_model=N
             p = propensity_model(X)
 
     # compute the treatment effect transformation we want
-    po_function = _get_po_function(setting, binary)
+    po_function = _get_po_plugin_function(setting, binary)
     ite = po_function(bs, bs+t)
 
     return X, y, w, ite, p, bs
