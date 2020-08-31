@@ -32,7 +32,7 @@ def _eval_one_setting(base_estimator, train, test, n_train, n_test, d=1,
                       selection_bias=None,
                       seedy=42):
     np.random.seed(seedy)
-    X, y, w, t, p = make_te_data(n=n_train + n_test, d=d, te_model=te_function,
+    X, y, w, t, p, _ = make_te_data(n=n_train + n_test, d=d, te_model=te_function,
                                  baseline_model=baseline_model, covariate_model=covariate_model,
                                  propensity_model=propensity_model, binary_y=binary_y,
                                  error_model=error_model,
@@ -116,7 +116,7 @@ def _eval_one_setting(base_estimator, train, test, n_train, n_test, d=1,
 
 
 def eval_setting_repeat(estimator, n_train, repeats=N_REPEATS_BASE, n_test=N_TEST_BASE, d=1,
-                        te_function=None, baseline_model=None, selection_bias=None, binary=False,
+                        te_function=None, baseline_model=None, selection_bias=None, binary_y=False,
                         te_estimator=None,
                         propensity_model=None, error_model=None,
                         pre_dispatch='2*n_jobs', n_jobs=1, verbose=0):
@@ -129,7 +129,7 @@ def eval_setting_repeat(estimator, n_train, repeats=N_REPEATS_BASE, n_test=N_TES
     # dispatch with different seeds
     scores = parallel(delayed(_eval_one_setting)(clone(estimator), train, test, n_train, n_test,
                                                  d=d, selection_bias=selection_bias,
-                                                 te_function=te_function, binary=binary,
+                                                 te_function=te_function, binary_y=binary_y,
                                                  baseline_model=baseline_model,
                                                  te_estimator=te_estimator,
                                                  propensity_model=propensity_model,
@@ -146,7 +146,7 @@ def eval_setting_repeat(estimator, n_train, repeats=N_REPEATS_BASE, n_test=N_TES
 
 
 def eval_range_n(estimator, range_n, repeats=N_REPEATS_BASE, n_test=N_TEST_BASE, d=1,
-                 te_function=None, baseline_model=None, binary=False, te_estimator=None,
+                 te_function=None, baseline_model=None, binary_y=False, te_estimator=None,
                  propensity_model=None, error_model=None,
                  pre_dispatch='2*n_jobs', n_jobs=1, verbose=0):
     # evaluate performance on range of n
@@ -163,7 +163,7 @@ def eval_range_n(estimator, range_n, repeats=N_REPEATS_BASE, n_test=N_TEST_BASE,
                                      error_model=error_model,
                                      pre_dispatch=pre_dispatch,
                                      n_jobs=n_jobs,
-                                     verbose=verbose, binary=binary
+                                     verbose=verbose, binary_y=binary_y
                                      )
         # need possiblity for nans in case something goes wrong in small n regime
         means = np.array([np.nanmean(np.array(x)) for x in scores])
@@ -174,7 +174,7 @@ def eval_range_n(estimator, range_n, repeats=N_REPEATS_BASE, n_test=N_TEST_BASE,
 
 
 def eval_range_d(estimator, range_d, propensity_model=None,
-                 repeats=N_REPEATS_BASE, binary=False, te_estimator=None,
+                 repeats=N_REPEATS_BASE, binary_y=False, te_estimator=None,
                  n_test=N_TEST_BASE, n_train=N_TRAIN_BASE,
                  te_function=None, baseline_model=None, error_model=None,
                  pre_dispatch='2*n_jobs', n_jobs=1, verbose=0):
@@ -185,7 +185,7 @@ def eval_range_d(estimator, range_d, propensity_model=None,
         scores = eval_setting_repeat(estimator=estimator, n_train=n_train,
                                      repeats=repeats, n_test=n_test, te_estimator=te_estimator,
                                      d=d, te_function=te_function,
-                                     baseline_model=baseline_model, binary=binary,
+                                     baseline_model=baseline_model, binary_y=binary_y,
                                      propensity_model=propensity_model,
                                      error_model=error_model,
                                      pre_dispatch=pre_dispatch,
@@ -201,7 +201,7 @@ def eval_range_d(estimator, range_d, propensity_model=None,
 
 def eval_range_bias(estimator, range_p, propensity_class, repeats=N_REPEATS_BASE,
                     n_test=N_TEST_BASE, n_train=N_TRAIN_BASE,
-                    d=1, te_function=None, binary=False, te_estimator=None,
+                    d=1, te_function=None, binary_y=False, te_estimator=None,
                     baseline_model=None, error_model=None,
                     pre_dispatch='2*n_jobs', n_jobs=1, verbose=0):
     resultframe = pd.DataFrame(columns=['t_mean', 'ot_mean', 'if_mean', 'oif_mean', 't_sd',
@@ -211,7 +211,7 @@ def eval_range_bias(estimator, range_p, propensity_class, repeats=N_REPEATS_BASE
         print('Bias with parameter: {}'.format(p))
         scores = eval_setting_repeat(estimator=estimator, n_train=n_train,
                                      repeats=repeats, n_test=n_test, te_estimator=te_estimator,
-                                     d=d, te_function=te_function, binary=binary,
+                                     d=d, te_function=te_function, binary_y=binary_y,
                                      baseline_model=baseline_model,
                                      propensity_model=None,
                                      selection_bias=selection_model,
