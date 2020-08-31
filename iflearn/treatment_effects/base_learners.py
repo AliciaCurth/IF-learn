@@ -37,11 +37,24 @@ class BaseTEModel(BaseEstimator, RegressorMixin, abc.ABC):
 
 
 class PlugInTELearner(BaseTEModel):
-    # ML-based TE-model based on a T-learner
-    def __init__(self, base_estimator, setting=CATE_NAME, binary=False):
+    """
+    Class for Plug-in estimation of treatment effects.
+
+    Parameters
+    ----------
+    base_estimator: estimator
+        Estimator to be used for potential outcome regressions
+    setting: str or callable, default 'CATE'
+        The treatment effect setting to be considered. Currently built-in support for 'CATE' or
+        'RR'. Can also pass a callable that is a plug-in function of the two potenital outcome
+        regressions.
+    binary_y: bool, default False
+        Whether the outcome data is binary
+    """
+    def __init__(self, base_estimator, setting=CATE_NAME, binary_y: bool = False):
         self.base_estimator = base_estimator
         self.setting = setting
-        self.binary = binary
+        self.binary_y = binary_y
 
     def _prepare_self(self):
         # to make sure that we are starting with clean objects
@@ -49,37 +62,100 @@ class PlugInTELearner(BaseTEModel):
         self._plug_in_1 = clone(self.base_estimator)
 
         # set potential outcome function
-        self._po_function = _get_po_function(self.setting, self.binary)
+        self._po_function = _get_po_function(self.setting, self.binary_y)
 
     def fit(self, X, y, w, p=None):
+        """
+        Fit plug-in models .
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            The features to fit to
+        y : array-like of shape (n_samples,) or (n_samples, )
+            The outcome variable
+        w: array-like of shape (n_samples,)
+            The treatment indicator
+        p: array-like of shape (n_samples,)
+            The treatment propensity
+        """
         self._prepare_self()
         self._plug_in_0.fit(X[w == 0], y[w == 0])
         self._plug_in_1.fit(X[w == 1], y[w == 1])
 
-    def predict(self, X, return_po=False):
-        if self.binary:
-            Y_est_0 = self._plug_in_0.predict_proba(X)
-            Y_est_1 = self._plug_in_1.predict_proba(X)
-        else:
-            Y_est_0 = self._plug_in_0.predict(X)
-            Y_est_1 = self._plug_in_1.predict(X)
+    def predict(self, X, return_po: bool = False):
+        """
+        Predict treatment effects and potential outcomes
 
-        TE_est = self._po_function(mu_0=Y_est_0, mu_1=Y_est_1)
-        if return_po:
-            return TE_est, Y_est_0, Y_est_1
+        Parameters
+        ----------
+        X: array-like of shape (n_samples, n_features)
+            Test-sample features
+        return_po: bool, default False
+            Whether to return potential outcome predictions
+
+        Returns
+        -------
+        te_est: array-like of shape (n_samples,)
+            Predicted treatment effects
+        y_0: array-like of shape (n_samples,)
+            Predicted Y(0)
+        y_1: array-like of shape (n_samples,)
+            Predicted Y(1)
+        """
+        if self.binary_y:
+            y_0 = self._plug_in_0.predict_proba(X)
+            y_1 = self._plug_in_1.predict_proba(X)
         else:
-            return TE_est
+            y_0 = self._plug_in_0.predict(X)
+            y_1 = self._plug_in_1.predict(X)
+
+        te_est = self._po_function(mu_0=y_0, mu_1=y_1)
+        if return_po:
+            return te_est, y_0, y_1
+        else:
+            return te_est
 
 
 class IFLearnerTE(BaseTEModel):
-    def __init__(self, te_estimator, base_estimator=None, propensity_estimator=None,
-                 double_sample_split=False, setting=CATE_NAME, binary=False,
-                 fit_base_model=False, fit_propensity_model=False,
-                 n_folds=10, random_state=42):
+    """
+    Class implementing the IF-learner of Curth, Alaa and van der Schaar (2020) for the special
+    case of treatment effect estimation.
 
+    Parameters
+    ----------
+    te_estimator: estimator
+        estimator for second stage
+    base_estimator: estimator, default None
+        estimator for first stage. Can be None, then te_estimator is used
+    setting: str or callable, default 'CATE'
+        The treatment effect setting to be considered. Currently built-in support for 'CATE' or
+        'RR'. Can also pass a callable that is a plug-in function of the two potential outcome
+        regressions.
+    binary_y: bool, default False
+        Whether the outcome data is binary
+    fit_base_model: bool, default False
+        Whether to fit a plug-in model on the full-sample to get potential outcome regressions
+        in addition to treatment effect model
+    fit_propensity_model: bool, default False
+        Whether to fit a propensity model
+    propensity_estimator: estimator, default None
+        estimator for propensity scores. Needed only if fit_propensity_model is True
+    double_sample_split: boolean, default False
+        whether to use a double sample split, needed only if fit_propensity_model is True
+    n_folds: int, default 10
+        Number of cross-fitting folds
+    random_state: int, default 42
+        random state to use for cross-fitting splits
+    """
+    def __init__(self, te_estimator, base_estimator=None, propensity_estimator=None,
+                 setting=CATE_NAME, binary_y: bool = False,
+                 fit_base_model: bool = False, fit_propensity_model: bool = False,
+                 double_sample_split: bool = False,
+                 n_folds: int = 10, random_state: int = 42):
         # set estimators
         if te_estimator is None and base_estimator is None:
-            raise ValueError('Need an te_estimator')
+            raise ValueError('Need a te_estimator or a base_estimator')
 
         if te_estimator is None:
             self.te_estimator = base_estimator
@@ -95,7 +171,7 @@ class IFLearnerTE(BaseTEModel):
         self.fit_base_model = fit_base_model
         self.n_folds = n_folds
         self.random_state = random_state
-        self.binary = binary
+        self.binary_y = binary_y
 
         # TODO add selection bias
         self.fit_propensity_model = fit_propensity_model
@@ -111,7 +187,7 @@ class IFLearnerTE(BaseTEModel):
             self._plug_in_0 = clone(self.base_estimator)
             self._plug_in_1 = clone(self.base_estimator)
 
-        self._eif = _get_te_eif(self.setting, self.binary)
+        self._eif = _get_te_eif(self.setting, self.binary_y)
 
     def _plug_in_step(self, X, y, w, fit_mask, pred_mask):
         # split sample
@@ -125,7 +201,7 @@ class IFLearnerTE(BaseTEModel):
         temp_model_1 = clone(self.base_estimator)
         temp_model_1.fit(X_fit[W_fit == 1], Y_fit[W_fit == 1])
 
-        if self.binary:
+        if self.binary_y:
             mu_0_pred = temp_model_0.predict_proba(X[pred_mask, :])
             mu_1_pred = temp_model_1.predict_proba(X[pred_mask, :])
         else:
@@ -143,6 +219,20 @@ class IFLearnerTE(BaseTEModel):
         self.te_estimator.fit(X, transformed_outcome)
 
     def fit(self, X, y, w, p=None):
+        """
+        Fit two stages of pseudo-outcome regression to get treatment effect estimators
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            The features to fit to
+        y : array-like of shape (n_samples,) or (n_samples, )
+            The outcome variable
+        w: array-like of shape (n_samples,)
+            The treatment indicator
+        p: array-like of shape (n_samples,)
+            The treatment propensity
+        """
         self._prepare_self()
         self._fit(X, y, w, p)
 
@@ -186,19 +276,38 @@ class IFLearnerTE(BaseTEModel):
             self._plug_in_1.fit(X[w == 1], y[w == 1])
 
     def predict(self, X, return_po=False):
+        """
+        Predict treatment effects and potential outcomes
+
+        Parameters
+        ----------
+        X: array-like of shape (n_samples, n_features)
+            Test-sample features
+        return_po: bool, default False
+            Whether to return potential outcome predictions
+
+        Returns
+        -------
+        te_est: array-like of shape (n_samples,)
+            Predicted treatment effects
+        y_0: array-like of shape (n_samples,)
+            Predicted Y(0)
+        y_1: array-like of shape (n_samples,)
+            Predicted Y(1)
+        """
         if return_po:
             # return both treatment effect estimates and potential outcome (first stage) estimates
             if not self.fit_base_model:
                 raise ValueError("Cannot return potential outcomes when no base-model is fit")
             else:
-                te = self.te_estimator.predict(X)
-                if self.binary:
+                te_est = self.te_estimator.predict(X)
+                if self.binary_y:
                     y_0 = self._plug_in_0.predict_proba(X)
                     y_1 = self._plug_in_1.predict_proba(X)
                 else:
                     y_0 = self._plug_in_0.predict(X)
                     y_1 = self._plug_in_1.predict(X)
-                return te, y_0, y_1
+                return te_est, y_0, y_1
         else:
             # return only
             return self.te_estimator.predict(X)
@@ -206,11 +315,16 @@ class IFLearnerTE(BaseTEModel):
 
 class TEOracle(BaseTEModel):
     """
-    Class to be able to pass the truth into optimizers
-    """
+    Class which implements a treatment effect oracle with knowledge of all underlying functions.
 
+    Parameters
+    ----------
+    te_model: callable
+        function outputting treatment effects as a function of X
+    base_model: callable
+        function outputting baseline outcomes as a function of X
+    """
     def __init__(self, te_model, base_model):
-        # override super
         self.te_model = te_model
         self.base_model = base_model
 
@@ -219,6 +333,25 @@ class TEOracle(BaseTEModel):
         pass
 
     def predict(self, X, return_po=False):
+        """
+        Give treatment effects and potential outcomes using Oracle knowledge
+
+        Parameters
+        ----------
+        X: array-like of shape (n_samples, n_features)
+            Test-sample features
+        return_po: bool, default False
+            Whether to return potential outcome predictions
+
+        Returns
+        -------
+        te: array-like of shape (n_samples,)
+            Oracle treatment effects
+        mu_0: array-like of shape (n_samples,)
+            Oracle E[Y(0)|X]
+        mu_1: array-like of shape (n_samples,)
+            Oracle E[Y(1)|X]
+        """
         te = self.te_model(X)
 
         if return_po:
@@ -230,7 +363,16 @@ class TEOracle(BaseTEModel):
 
 class IFTEOracle(BaseTEModel):
     """
-    Class to estimate IF using oracle first stage
+    Class to estimate treatment effects using IF-learner second stage and using oracle first stage
+
+    Parameters
+    ----------
+    te_estimator: estimator
+        estimator for second stage
+    te_model: callable
+        function outputting treatment effects as a function of X
+    base_model: callable
+        function outputting baseline outcomes as a function of X
     """
 
     def __init__(self, te_estimator, te_model, base_model, setting=CATE_NAME):
@@ -241,6 +383,20 @@ class IFTEOracle(BaseTEModel):
         self.setting = setting
 
     def fit(self, X, y, w, p=None):
+        """
+        Fit second stage of IF-estimator given first stage oracle
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            The features to fit to
+        y : array-like of shape (n_samples,) or (n_samples, )
+            The outcome variable
+        w: array-like of shape (n_samples,)
+            The treatment indicator
+        p: array-like of shape (n_samples,)
+            The treatment propensity
+        """
         # set EIF
         self._eif = _get_te_eif(self.setting)
 
@@ -253,6 +409,25 @@ class IFTEOracle(BaseTEModel):
         self.te_estimator.fit(X, pseudo_outcome)
 
     def predict(self, X, return_po=False):
+        """
+        Predict treatment effects and potential outcomes using fitted te-model
+
+        Parameters
+        ----------
+        X: array-like of shape (n_samples, n_features)
+            Test-sample features
+        return_po: bool, default False
+            Whether to return potential outcome predictions
+
+        Returns
+        -------
+        te_est: array-like of shape (n_samples,)
+            Predicted treatment effects
+        mu_0: array-like of shape (n_samples,)
+            Oracle E[Y(0)|X]
+        mu_1: array-like of shape (n_samples,)
+            Oracle E[Y(1)|X]
+        """
         te = self.te_estimator.predict(X)
         mu_0 = self.base_model(X)
         mu_1 = mu_0 + self.te_model(X)

@@ -65,8 +65,8 @@ def _get_te_eif(setting, binary=None):
             return _eif
 
         if not binary and setting in TE_SETTINGS_BINARY:
-            warnings.warn("You chose to work with a setting made for binary data but set "
-                          "binary=False.")
+            warnings.warn("You chose to work with a setting made for binary_y data but set "
+                          "binary_y=False.")
     elif callable(setting):
         _eif = setting
     else:
@@ -87,8 +87,8 @@ def _get_po_function(setting, binary=None):
         if binary is None:
             return _po_function
         if not binary and setting in TE_SETTINGS_BINARY:
-            warnings.warn("You chose to work with a setting made for binary data but set "
-                          "binary=False.")
+            warnings.warn("You chose to work with a setting made for binary_y data but set "
+                          "binary_y=False.")
     elif callable(setting):
         _po_function = setting
     else:

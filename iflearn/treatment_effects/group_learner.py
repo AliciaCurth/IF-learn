@@ -12,14 +12,47 @@ from .base_learners import IFLearnerTE, PlugInTELearner
 
 
 class GroupIFLearner(IFLearnerTE):
+    """
+    Class implementing the Group-IF-learner from Curth, Alaa and van der Schaar (2020) for
+    treatment effect estimation.
+
+    Parameters
+    ----------
+    te_estimator: estimator
+        estimator for second stage
+    base_estimator: estimator, default None
+        estimator for first stage. Can be None, then te_estimator is used
+    setting: str or callable, default 'CATE'
+        The treatment effect setting to be considered. Currently built-in support for 'CATE' or
+        'RR'. Can also pass a callable that is a plug-in function of the two potential outcome
+        regressions.
+    binary_y: bool, default False
+        Whether the outcome data is binary
+    plug_in_corrected: bool, default True
+        Whether to use plug-in bias-corrected first stage model for grouping (IF-learner)
+    baseline_adjustment: bool, default True
+        Whether to use baseline adjustment in Second stage (for improved precision)
+    efficient_est: bool, default True
+        Whether to use efficient second stage estimator. If False and setting 'CATE', will use
+        Chernozhukov et al. (2018)'s estimator instead
+    honest: bool, default True
+        Whether to perform honest estimation by splitting data in auxiliary and estimation sample
+        (recommended)
+    n_folds: int, default 10
+        Number of cross-fitting folds
+    random_state: int, default 42
+        random state to use for cross-fitting splits
+    n_groups: int, default 5
+        number of groups to be created on basis of quantiles of treatment effects
+    """
     def __init__(self, te_estimator, base_estimator=None,
-                 setting=CATE_NAME,
-                 n_folds=10, random_state=42, n_groups=5,
-                 plug_in_corrected=True, baseline_adjustment=True, honest=True,
-                 efficient_est=False):
+                 setting=CATE_NAME, binary_y: bool = False,
+                 plug_in_corrected: bool = True, baseline_adjustment: bool = True,
+                 efficient_est: bool = True, honest: bool = False,
+                 n_folds=10, random_state=42, n_groups: int = 5, ):
         super().__init__(te_estimator=te_estimator, fit_base_model=baseline_adjustment,
                          base_estimator=base_estimator, fit_propensity_model=False,
-                         n_folds=n_folds, setting=setting,
+                         n_folds=n_folds, setting=setting, binary_y=binary_y,
                          random_state=random_state)
         self.n_groups = n_groups
         self.plug_in_corrected = plug_in_corrected
@@ -35,7 +68,7 @@ class GroupIFLearner(IFLearnerTE):
         if self.plug_in_corrected:
             self._plug_in_model = IFLearnerTE(te_estimator=self.te_estimator, fit_base_model=True,
                                               base_estimator=self.base_estimator,
-                                              setting=self.setting,
+                                              setting=self.setting, binary_y=self.binary_y,
                                               propensity_estimator=self.propensity_estimator,
                                               double_sample_split=self.double_sample_split,
                                               n_folds=self.n_folds,
@@ -116,7 +149,7 @@ class GroupIFLearner(IFLearnerTE):
             if np.sum(1 - w[member]) == 0 or np.sum(w[member]) == 0:
                 raise ValueError(
                     'Only one of treatment and control group is present in group {} '
-                    'cannot compute the group effect'.format(i+1))
+                    'cannot compute the group effect'.format(i + 1))
 
             if self.baseline_adjustment:
                 if self.efficient_est:
@@ -188,6 +221,22 @@ class GroupIFLearner(IFLearnerTE):
         self._taus = res.params[:self.n_groups]
 
     def predict(self, X, return_po=False):
+        def predict(self, X, return_po=False):
+            """
+            Get group-wise treatment effects for new set of data
+
+            Parameters
+            ----------
+            X: array-like of shape (n_samples, n_features)
+                Test-sample features
+            return_po: bool, default False
+                Whether to return potential outcome predictions
+
+            Returns
+            -------
+            te_est: array-like of shape (n_samples,)
+                Predicted treatment effects
+            """
         if return_po:
             raise NotImplementedError('Group-IF-Learners have no po-model')
 
@@ -195,19 +244,19 @@ class GroupIFLearner(IFLearnerTE):
         n = X.shape[0]
         tau_tilde = self._plug_in_model.predict(X)
 
-        preds = np.zeros(n)
+        te_est = np.zeros(n)
         grouped = np.zeros(n, dtype=bool)
 
         # get predictions
         for i in range(self.n_groups - 1):
             member = (tau_tilde < self._thresholds[i]) & (~grouped)
-            preds[member] = self._taus[i]
+            te_est[member] = self._taus[i]
             grouped[member] = True
 
         # assign last people to highest group
-        preds[~grouped] = self._taus[self.n_groups - 1]
+        te_est[~grouped] = self._taus[self.n_groups - 1]
 
-        return preds
+        return te_est
 
     def _group_tau(self, y, w, p=None, mu_0=None, mu_1=None):
         if np.sum(1 - w) == 0 or np.sum(w) == 0:
@@ -218,7 +267,7 @@ class GroupIFLearner(IFLearnerTE):
         else:
             # IPW/HT estimate
             if self.setting == 'RR':
-                return ht_rr_transformation(y, w, p)
+                return rr_from_means(y, w, p)
             else:
                 return np.average(ht_te_transformation(y, w, p))
 
@@ -234,7 +283,24 @@ class GroupIFLearner(IFLearnerTE):
             return 1 / n * np.var(ht_te_transformation(y, w, p))
 
 
-def ht_rr_transformation(y, w, p):
+def rr_from_means(y, w, p):
+    """
+    Compute risk ratios from Horvitz-Thompson weighted means of outcomes.
+
+    Parameters
+    ----------
+    y : array-like of shape (n_samples,) or (n_samples, )
+            The outcome variable
+    w: array-like of shape (n_samples,)
+            The treatment indicator
+    p: array-like of shape (n_samples,)
+            The treatment propensity
+
+    Returns
+    -------
+    rr_mean: float
+        Risk ratio of HT-means
+    """
     if p is None:
         # assume equal
         p = np.full(len(y), 0.5)

@@ -26,22 +26,22 @@ def fit_and_score_te_oracle(estimator, X, y, w, p, t, scorer, train, test,
                             return_times=False, return_estimator=False,
                             error_score=np.nan,
                             return_test_score_only=False):
-    """Fit estimator and compute scores for a given dataset split. Based on
-    sklearn.model_selection._validation _fit_and_score.
+    """Fit estimator and compute scores for a given dataset split, using oracle knowledge of
+    treatment effects. Based on sklearn.model_selection._validation _fit_and_score, adapted to
+    allow more inputs (treatments and treatment effects)
 
     Parameters
     ----------
     estimator : estimator object implementing 'fit'
         The object to use to fit the data.
     X : array-like of shape (n_samples, n_features)
-        The data to fit.
-    y : array-like of shape (n_samples,) or (n_samples, n_outputs) or None
-        The target variable to try to predict in the case of
-        supervised learning.
+            The features to fit to
+    y : array-like of shape (n_samples,) or (n_samples, )
+            The outcome variable
     w: array-like of shape (n_samples,)
-        the treatment indicator
+            The treatment indicator
     p: array-like of shape (n_samples,)
-        the treatment propensity
+            The treatment propensity
     t: array-like of shape (n_samples,)
         the true treatment effect to evaluate against
     scorer : A single callable or dict mapping scorer name to the callable
@@ -183,28 +183,24 @@ def _safe_split_te(X, y, w, p, t, indices):
 
     Parameters
     ----------
-    X : array-like, sparse matrix or iterable
-        Data to be indexed. If ``estimator._pairwise is True``,
-        this needs to be a square array-like or sparse matrix.
-    y : array-like, sparse matrix or iterable
-        Targets to be indexed.
+    X : array-like of shape (n_samples, n_features)
+            The features to fit to
+    y : array-like of shape (n_samples,) or (n_samples, )
+            The outcome variable
     w: array-like of shape (n_samples,)
-        the treatment indicator
+            The treatment indicator
+    p: array-like of shape (n_samples,)
+            The treatment propensity
     p: array-like of shape (n_samples, )
-        the treatment propensity
+        the treatment propensity, can be none
     t: array-like of shape (n_samples,)
         the truth to evaluate against (can be None)
     indices : array of int
-        Rows to select from X and y.
-        If ``estimator._pairwise is True`` and ``train_indices is None``
-        then ``indices`` will also be used to slice columns.
+        Rows to select from the above
 
     Returns
     -------
-    X_subset : array-like, sparse matrix or list
-        Indexed data.
-    y_subset : array-like, sparse matrix or list
-        Indexed targets.
+    Subsets of inputs
     """
     X_subset = _safe_indexing(X, indices)
     y_subset = _safe_indexing(y, indices)

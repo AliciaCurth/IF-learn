@@ -90,10 +90,10 @@ def test_plugin_learner():
     np.testing.assert_almost_equal(mu_1, mu_1_plug)
     np.testing.assert_almost_equal(p_model.predict(X), mu_1_plug - mu_0_plug)
 
-    # check that binary setting also works (smoketest)
+    # check that binary_y setting also works (smoketest)
     X, y, w, ite, p, bs = make_te_data(n=200, baseline_model=binary_gyorfi_baseline,
                                        noise=False,  binary=True)
-    p_model = PlugInTELearner(LogisticGAM(), binary=True, setting=RR_NAME)
+    p_model = PlugInTELearner(LogisticGAM(), binary_y=True, setting=RR_NAME)
     p_model.fit(X, y, w, p)
     te, mu_0, mu_1 = p_model.predict(X, return_po=True)
 
@@ -146,10 +146,10 @@ def test_if_learner():
         if_learner = IFLearnerTE(LinearGAM(), n_folds=1, random_state=42)
         if_learner.fit(X, y, w, p)
 
-    # check that binary setting also works (smoketest)
+    # check that binary_y setting also works (smoketest)
     X, y, w, ite, p, bs = make_te_data(n=200, baseline_model=binary_gyorfi_baseline,
                                        noise=False,  binary=True)
     if_learner = IFLearnerTE(base_estimator=LogisticGAM(), te_estimator=LinearGAM(),
-                             binary=True, setting=RR_NAME, fit_base_model=True)
+                             binary_y=True, setting=RR_NAME, fit_base_model=True)
     if_learner.fit(X, y, w, p)
     te, mu_0, mu_1 = if_learner.predict(X, return_po=True)
