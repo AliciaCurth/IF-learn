@@ -92,7 +92,7 @@ def test_plugin_learner():
 
     # check that binary_y setting also works (smoketest)
     X, y, w, ite, p, bs = make_te_data(n=200, baseline_model=binary_gyorfi_baseline,
-                                       noise=False,  binary=True)
+                                       noise=False, binary_y=True)
     p_model = PlugInTELearner(LogisticGAM(), binary_y=True, setting=RR_NAME)
     p_model.fit(X, y, w, p)
     te, mu_0, mu_1 = p_model.predict(X, return_po=True)
@@ -148,7 +148,7 @@ def test_if_learner():
 
     # check that binary_y setting also works (smoketest)
     X, y, w, ite, p, bs = make_te_data(n=200, baseline_model=binary_gyorfi_baseline,
-                                       noise=False,  binary=True)
+                                       noise=False, binary_y=True)
     if_learner = IFLearnerTE(base_estimator=LogisticGAM(), te_estimator=LinearGAM(),
                              binary_y=True, setting=RR_NAME, fit_base_model=True)
     if_learner.fit(X, y, w, p)

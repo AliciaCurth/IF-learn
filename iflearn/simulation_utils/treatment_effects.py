@@ -10,7 +10,7 @@ BASE_TE_MODEL = constant_baseline
 
 
 def make_te_data(n: int = 1000, d: int = 1, setting=CATE_NAME, covariate_model=None,
-                 binary=False, te_model=None,
+                 binary_y=False, te_model=None,
                  propensity_model=None,
                  baseline_model=None, noise=True, error_model=None,
                  selection_bias=None, seedy=42):
@@ -23,7 +23,7 @@ def make_te_data(n: int = 1000, d: int = 1, setting=CATE_NAME, covariate_model=N
     d
     setting
     covariate_model
-    binary
+    binary_y
     te_model
     propensity_model
     baseline_model
@@ -65,7 +65,7 @@ def make_te_data(n: int = 1000, d: int = 1, setting=CATE_NAME, covariate_model=N
         t = te_model(X)
 
     # add error
-    if binary:
+    if binary_y:
         y = w*t
     else:
         if noise:
@@ -84,7 +84,7 @@ def make_te_data(n: int = 1000, d: int = 1, setting=CATE_NAME, covariate_model=N
         bs = BASE_BASELINE_MODEL(X)
 
     # generate outcome
-    if binary:
+    if binary_y:
         y = np.random.binomial(1, p=y+bs)
     else:
         y = y + bs
@@ -97,7 +97,7 @@ def make_te_data(n: int = 1000, d: int = 1, setting=CATE_NAME, covariate_model=N
             p = propensity_model(X)
 
     # compute the treatment effect transformation we want
-    po_function = _get_po_plugin_function(setting, binary)
+    po_function = _get_po_plugin_function(setting, binary_y)
     ite = po_function(bs, bs+t)
 
     return X, y, w, ite, p, bs

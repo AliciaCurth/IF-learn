@@ -64,7 +64,7 @@ class PlugInTELearner(BaseTEModel):
         self._plug_in_1 = clone(self.base_estimator)
 
         # set potential outcome function
-        self._po_function = _get_po_plugin_function(self.setting, self.binary_y)
+        self._po_plugin_function = _get_po_plugin_function(self.setting, self.binary_y)
 
     def fit(self, X, y, w, p=None):
         """
@@ -112,7 +112,7 @@ class PlugInTELearner(BaseTEModel):
             y_0 = self._plug_in_0.predict(X)
             y_1 = self._plug_in_1.predict(X)
 
-        te_est = self._po_function(mu_0=y_0, mu_1=y_1)
+        te_est = self._po_plugin_function(mu_0=y_0, mu_1=y_1)
         if return_po:
             return te_est, y_0, y_1
         else:
@@ -327,13 +327,15 @@ class TEOracle(BaseTEModel):
     base_model: callable
         function outputting baseline outcomes as a function of X
     """
-    def __init__(self, te_model, base_model):
+    def __init__(self, te_model, base_model, setting=CATE_NAME, binary_y: bool = False):
         self.te_model = te_model
         self.base_model = base_model
+        self.setting = setting
+        self.binary_y = binary_y
 
     def fit(self, X, y, w, p=None):
-        # placeholder to fit syntax
-        pass
+        # set potential outcome function
+        self._po_plugin_function = _get_po_plugin_function(self.setting, self.binary_y)
 
     def predict(self, X, return_po=False):
         """
@@ -355,11 +357,11 @@ class TEOracle(BaseTEModel):
         mu_1: array-like of shape (n_samples,)
             Oracle E[Y(1)|X]
         """
-        te = self.te_model(X)
-
+        mu_0 = self.base_model(X)
+        mu_1 = mu_0 + self.te_model(X)
+        te = self._po_plugin_function(mu_0=mu_0, mu_1=mu_1)
         if return_po:
-            mu_0 = self.base_model(X)
-            return te, mu_0, mu_0 + te
+            return te, mu_0, mu_1
         else:
             return te
 
