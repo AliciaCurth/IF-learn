@@ -33,10 +33,10 @@ def _eval_one_setting(base_estimator, train, test, n_train, n_test, d=1,
                       seedy=42):
     np.random.seed(seedy)
     X, y, w, t, p, _ = make_te_data(n=n_train + n_test, d=d, te_model=te_function,
-                                 baseline_model=baseline_model, covariate_model=covariate_model,
-                                 propensity_model=propensity_model, binary_y=binary_y,
-                                 error_model=error_model,
-                                 seedy=seedy, selection_bias=selection_bias)
+                                    baseline_model=baseline_model, covariate_model=covariate_model,
+                                    propensity_model=propensity_model, binary_y=binary_y,
+                                    error_model=error_model,
+                                    seedy=seedy, selection_bias=selection_bias)
 
     # update some settings for safety
     if binary_y:
@@ -204,6 +204,7 @@ def eval_range_bias(estimator, range_p, propensity_class, repeats=N_REPEATS_BASE
                     d=1, te_function=None, binary_y=False, te_estimator=None,
                     baseline_model=None, error_model=None,
                     pre_dispatch='2*n_jobs', n_jobs=1, verbose=0):
+
     resultframe = pd.DataFrame(columns=['t_mean', 'ot_mean', 'if_mean', 'oif_mean', 't_sd',
                                         'ot_sd', 'if_sd', 'oif_sd'])
     for p in range_p:
@@ -228,6 +229,9 @@ def eval_range_bias(estimator, range_p, propensity_class, repeats=N_REPEATS_BASE
 
 
 def make_plot_frame(results, methods=METHOD_NAMES, dim_name='n'):
+    """
+    Function to make a dataframe for plotting
+    """
     plot_frame = pd.DataFrame(columns=[dim_name, 'method', 'meanmse', 'sd'])
     for key, val in methods.items():
         new_frame = pd.DataFrame(data={dim_name: results.index.values,

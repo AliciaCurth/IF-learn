@@ -1,6 +1,12 @@
 """
 Author: Alicia Curth
-Module implements helper classes for simulations
+Module implements helper classes for simulations. In particular, this module contains:
+(1) AdaptiveLogisticGAM, a LogisticGAM with internal hyperparameter optimixation
+(2) RSmoothingSpline, Base Rs smooth.splinein in a sklearn-style python wrapper
+(3) RRegressionForest, RegressionForest from the R package grf in a
+ sklearn-style python wrapper
+ (4) RCausalForest, Causal forest from the R package grf in a
+  sklearn-style python wrapper
 """
 import pandas as pd
 import numpy as np
@@ -9,7 +15,13 @@ from pygam import LogisticGAM
 from sklearn.base import BaseEstimator, RegressorMixin
 
 import rpy2.robjects as robjects
+from rpy2.robjects.packages import importr
+import rpy2.robjects.numpy2ri
+from rpy2.robjects import pandas2ri
 
+from iflearn.treatment_effects.base_learners import BaseTEModel
+
+rpy2.robjects.numpy2ri.activate()
 GAM_GRID_BASE = {'lam': [0.001, 0.1, 0.6, 1, 10]}
 
 
@@ -83,8 +95,143 @@ class RSmoothingSpline(BaseEstimator, RegressorMixin):
         self._spline = r_smooth_spline(x=r_x, y=r_y, nknots=self.nknots)
 
     def predict(self, X):
-        y_spline = np.array(robjects.r['predict'](self._spline, robjects.FloatVector(X)).rx2('y'))
+        y_spline = np.array(robjects.r['predict'](self._spline,
+                            robjects.FloatVector(X)).rx2('y'))
         return y_spline
+
+# utils = importr('utils')
+# utils.install_packages('grf')
+
+
+# check if package is installed
+def _importr_tryhard(packname):
+    from rpy2.rinterface import RRuntimeError
+    utils = importr('utils')
+    try:
+        rpack = importr(packname)
+    except RRuntimeError:
+        utils.install_packages(packname)
+        rpack = importr(packname)
+    return rpack
+
+
+class RRegressionForest(BaseEstimator, RegressorMixin):
+    """
+    Wrapper for Athey, Tibshirani & Wager (2019)'s random forest as implemented in the GRF
+    package.
+    """
+    def __init__(self, n_estimators: int = 2000, random_state: int = 42):
+        self.n_estimators = n_estimators
+        self.random_state = random_state
+
+    def fit(self, X, y):
+        """
+        Fit regression forest
+        """
+        # bring data in right shape
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        n, d = X.shape
+        r_y = robjects.FloatVector(y)
+        r_x = robjects.r.matrix(X, n, d)
+
+        # get forest
+        self._grf = _importr_tryhard("grf")
+        self._estimator = self._grf.regression_forest(X=r_x, Y=r_y,
+                                                      num_trees=self.n_estimators,
+                                                      seed=self.random_state)
+
+    def predict(self, X, return_se: bool = False):
+        """
+        Make prediction, with or without standard errors associated
+        """
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        n, d = X.shape
+        r_x = robjects.r.matrix(X, n, d)
+
+        if return_se:
+            # predict with var
+            r_pred = self._grf.predict_regression_forest(self._estimator, newdata=r_x,
+                                                         estimate_variance=True)
+            r_pred = np.transpose(pandas2ri.ri2py_dataframe(r_pred).values)
+            return r_pred[:, 0], r_pred[:, 1]
+        else:
+            r_pred = self._grf.predict_regression_forest(self._estimator, newdata=r_x)
+            r_pred = pandas2ri.ri2py_dataframe(r_pred).values
+            return np.transpose(r_pred[0, :])
+
+
+class RCausalForest(BaseTEModel):
+    """
+    Wrapper for Athey, Tibshirani & Wager (2019)'s random forest as implemented in the GRF
+    package.
+    """
+    def __init__(self, n_estimators: int = 2000, random_state: int = 42):
+        self.n_estimators = n_estimators
+        self.random_state = random_state
+
+    def fit(self, X, y, w, p=None):
+        """
+        Fit causal forest
+        """
+        # bring data in right shape
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+
+        n, d = X.shape
+        r_y = robjects.FloatVector(y)
+        r_x = robjects.r.matrix(X, n, d)
+        r_w = robjects.IntVector(w)
+
+        # get forest
+        self._grf = _importr_tryhard("grf")
+
+        if p is not None:
+            # give propensity estimator
+            r_p = robjects.FloatVector(p)
+            params = {'X': r_x, 'Y': r_y, 'W': r_w, 'W.hat': r_p,
+                      'num_trees': self.n_estimators, 'seed': self.random_state}
+            self._estimator = self._grf.causal_forest(**params)
+
+        else:
+            self._estimator = self._grf.causal_forest(X=r_x, Y=r_y, W=r_w,
+                                                      num_trees=self.n_estimators,
+                                                      seed=self.random_state)
+
+    def predict(self, X, return_po: bool = False, return_se: bool = False):
+        """
+        Make prediction, with or without standard errors associated
+
+        Parameters
+        ----------
+        X: array-like
+            Test data
+        with_se: bool
+            Whether to return standard errors
+
+        Returns
+        -------
+
+        """
+        if return_po:
+            raise NotImplementedError('Causal forest does not return potential outcomes')
+
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        n, d = X.shape
+        r_x = robjects.r.matrix(X, n, d)
+
+        if return_se:
+            # predict with var
+            r_pred = self._grf.predict_causal_forest(self._estimator, newdata=r_x,
+                                                     estimate_variance=True)
+            r_pred = np.transpose(pandas2ri.ri2py_dataframe(r_pred).values)
+            return r_pred[:, 0], r_pred[:, 1]
+        else:
+            r_pred = self._grf.predict_causal_forest(self._estimator, newdata=r_x)
+            r_pred = pandas2ri.ri2py_dataframe(r_pred).values
+            return np.transpose(r_pred[0, :])
 
 
 # Selection bias class ---------------------------------------------
@@ -97,5 +244,4 @@ class TwoSideBias:
         self.dim = dim
 
     def __call__(self, X, *args, **kwargs):
-        return 0.5 + 0.5 * self.b/2 * np.sign(X[:, self.dim]) * X[:, self.dim] - 0.5 * self.b/2 * \
-               np.sign(-X[:, self.dim]) * X[:, self.dim]
+        return 0.5 + 0.5 * self.b * np.sign(X[:, self.dim]) * X[:, self.dim]

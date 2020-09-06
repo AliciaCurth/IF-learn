@@ -1,5 +1,10 @@
 *.pyc
 *.xml
 *.iml
+*.csv
+*.Rhistory
 .idea/
 .coverage
+.ipynb_checkpoints
+.pytest_cache
+
