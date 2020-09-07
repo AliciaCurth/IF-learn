@@ -66,6 +66,32 @@ get_te_predictions <- function(X, y, w, p, X_test, num_trees=2000, seedy=42){
   pred_if_knownp <- predict(if_knownp, X_test)$predictions
   pred_if_unknownp <- predict(if_unknownp, X_test)$predictions
   
+  # Adapted IF-learner -------------------------------------------------------
+  # make other pseudooutcome -- simplified according to Rubin & vdLaan (2008)
+  pseudo_simple <- (w - (1-w))*(y-y.hat)
+  s.weights.known <- w * (1/p) + (1-w) * (1/(1-p))
+  s.weights.unknown <- w * (1/w.hat) + (1-w) * (1/(1-w.hat))
+  
+  # fit second stage regression
+  if_simple_knownp <- regression_forest(X, pseudo_simple, 
+                                 seed=seedy, num.trees = num_trees, 
+                                 sample.weights = s.weights.known)
+  if_simple_unknownp <- regression_forest(X, pseudo_simple, 
+                                   seed=seedy, num.trees = num_trees, 
+                                   sample.weights = s.weights.unknown)
+  
+  pred_if_simple_knownp <- predict(if_simple_knownp, X_test)$predictions
+  pred_if_simple_unknownp <- predict(if_simple_unknownp, X_test)$predictions
+  
+  # weighted version of the former
+  y.forest.w <- regression_forest(X, y, sample.weights=s.weights.known, 
+                                         seed=seedy, num.trees = num_trees)
+  y.hat.w <- predict(y.forest.w)$predictions
+  pseudo_simple_knownp_w  <- (w - (1-w))*(y-y.hat.w)
+  if_simple_knownp_w <- regression_forest(X, pseudo_simple_knownp_w, 
+                                          seed=seedy, num.trees = num_trees, sample.weights = s.weights.known)
+  pred_if_simple_knownp_w <- predict(if_simple_knownp_w, X_test)$predictions
+  
   # plug-in estimator ---------------------------------------------------
   pred_plugin <- predict(y1.forest, X_test)$predictions - predict(y0.forest, X_test)$predictions
   
@@ -73,7 +99,10 @@ get_te_predictions <- function(X, y, w, p, X_test, num_trees=2000, seedy=42){
                    cf_p = pred_knownp, 
                    cf_np = pred_if_unknownp,
                    if_p = pred_if_knownp, 
-                   if_np = pred_if_unknownp)
+                   if_np = pred_if_unknownp,
+                   if_s_p = pred_if_simple_knownp,
+                   if_s_np = pred_if_simple_unknownp,
+                   if_s_p_w = pred_if_simple_knownp_w)
   return(res)
 }
 
