@@ -13,7 +13,7 @@ import warnings
 from sklearn.model_selection import StratifiedKFold
 from sklearn.base import BaseEstimator, RegressorMixin
 
-from ..utils.base import clone
+from ..utils.base import clone, check_estimator_has_method, get_name_needed_prediction_method
 from .base import CATE_NAME, _get_po_plugin_function, _get_te_eif
 
 
@@ -34,6 +34,15 @@ class BaseTEModel(BaseEstimator, RegressorMixin, abc.ABC):
     @abc.abstractmethod
     def predict(self, X, return_po=False):
         pass
+
+    @staticmethod
+    def _check_inputs(w, p):
+        if p is not None:
+            if np.sum(p > 1) > 0 or np.sum(p < 0) > 0:
+                raise ValueError('p should be in [0,1]')
+
+        if not ((w == 0) | (w == 1)).all():
+            raise ValueError('W should be binary')
 
 
 class PlugInTELearner(BaseTEModel):
@@ -59,6 +68,9 @@ class PlugInTELearner(BaseTEModel):
         self.binary_y = binary_y
 
     def _prepare_self(self):
+        needed_pred_method = get_name_needed_prediction_method(self.binary_y)
+        check_estimator_has_method(self.base_estimator, needed_pred_method,
+                                   'base_estimator', return_clone=False)
         # to make sure that we are starting with clean objects
         self._plug_in_0 = clone(self.base_estimator)
         self._plug_in_1 = clone(self.base_estimator)
@@ -82,6 +94,7 @@ class PlugInTELearner(BaseTEModel):
             The treatment propensity
         """
         self._prepare_self()
+        self._check_inputs(w, p)
         self._plug_in_0.fit(X[w == 0], y[w == 0])
         self._plug_in_1.fit(X[w == 1], y[w == 1])
 
@@ -144,8 +157,6 @@ class IFLearnerTE(BaseTEModel):
         Whether to fit a propensity model
     propensity_estimator: estimator, default None
         estimator for propensity scores. Needed only if fit_propensity_model is True
-    double_sample_split: boolean, default False
-        whether to use a double sample split, needed only if fit_propensity_model is True
     n_folds: int, default 10
         Number of cross-fitting folds
     random_state: int, default 42
@@ -154,7 +165,6 @@ class IFLearnerTE(BaseTEModel):
     def __init__(self, te_estimator, base_estimator=None, propensity_estimator=None,
                  setting=CATE_NAME, binary_y: bool = False,
                  fit_base_model: bool = False, fit_propensity_model: bool = False,
-                 double_sample_split: bool = False,
                  n_folds: int = 10, random_state: int = 42):
         # set estimators
         if te_estimator is None and base_estimator is None:
@@ -169,6 +179,9 @@ class IFLearnerTE(BaseTEModel):
         else:
             self.base_estimator = base_estimator
 
+        self.fit_propensity_model = fit_propensity_model
+        self.propensity_estimator = propensity_estimator
+
         # set other arguments
         self.setting = setting
         self.fit_base_model = fit_base_model
@@ -176,15 +189,21 @@ class IFLearnerTE(BaseTEModel):
         self.random_state = random_state
         self.binary_y = binary_y
 
-        # TODO add selection bias
-        self.fit_propensity_model = fit_propensity_model
-        self.double_sample_split = double_sample_split
-        self.propensity_estimator = propensity_estimator
-
     def _prepare_self(self):
-        # clone all estimators to be safe
-        self.te_estimator = clone(self.te_estimator)
-        self.base_estimator = clone(self.base_estimator)
+        # check that all estimators have the attributes they should have and clone them to be safe
+        if self.propensity_estimator is not None:
+            self.propensity_estimator = check_estimator_has_method(self.propensity_estimator,
+                                                                   'predict_proba',
+                                                                   'propensity_estimator')
+
+        needed_pred_method = get_name_needed_prediction_method(self.binary_y)
+        self.base_estimator = check_estimator_has_method(self.base_estimator,
+                                                         needed_pred_method,
+                                                         'base_estimator')
+
+        self.te_estimator = check_estimator_has_method(self.te_estimator,
+                                                       'predict',
+                                                       'te_estimator')
 
         if self.fit_base_model:
             self._plug_in_0 = clone(self.base_estimator)
@@ -212,9 +231,13 @@ class IFLearnerTE(BaseTEModel):
             mu_1_pred = temp_model_1.predict(X[pred_mask, :])
 
         if not self.fit_propensity_model:
-            return mu_0_pred, mu_1_pred
+            return mu_0_pred, mu_1_pred, np.nan
         else:
-            raise NotImplementedError('Estimation of propensity scores not yet implemented')
+            # also get estimated propensity scores
+            temp_propensity_estimator = clone(self.propensity_estimator)
+            temp_propensity_estimator.fit(X_fit, W_fit)
+            p_pred = temp_propensity_estimator.predict_proba(X[pred_mask, :])
+            return mu_0_pred, mu_1_pred, p_pred
 
     def _bias_correction_step(self, X, y, w, p, mu_0, mu_1):
         # create transformed outcome based on efficient influence function
@@ -237,6 +260,7 @@ class IFLearnerTE(BaseTEModel):
             The treatment propensity
         """
         self._prepare_self()
+        self._check_inputs(w, p)
         self._fit(X, y, w, p)
 
     def _fit(self, X, y, w, p=None):
@@ -252,9 +276,10 @@ class IFLearnerTE(BaseTEModel):
             warnings.warn("You chose to not use cross-fitting. This is not recommended.")
             pred_mask = np.ones(n, dtype=bool)
             # fit plug-in te_estimator
-            mu_0_pred, mu_1_pred = self._plug_in_step(X, y, w, pred_mask, pred_mask)
+            mu_0_pred, mu_1_pred, p_pred = self._plug_in_step(X, y, w, pred_mask, pred_mask)
+
         else:
-            mu_0_pred, mu_1_pred = np.zeros(n), np.zeros(n)
+            mu_0_pred, mu_1_pred, p_pred = np.zeros(n), np.zeros(n), np.zeros(n)
 
             # create folds stratified by treatment assignment to ensure balance
             splitter = StratifiedKFold(n_splits=self.n_folds, shuffle=True,
@@ -266,9 +291,12 @@ class IFLearnerTE(BaseTEModel):
                 pred_mask[test_index] = 1
 
                 # fit plug-in te_estimator
-                mu_0_pred[pred_mask], mu_1_pred[pred_mask] = self._plug_in_step(X, y, w,
-                                                                                ~pred_mask,
-                                                                                pred_mask)
+                mu_0_pred[pred_mask], mu_1_pred[pred_mask], p_pred[pred_mask] = \
+                    self._plug_in_step(X, y, w, ~pred_mask, pred_mask)
+
+        if self.fit_propensity_model:
+            # use estimated propensity scores
+            p = p_pred
 
         # STEP 2: bias correction
         self._bias_correction_step(X, y, w, p, mu_0_pred, mu_1_pred)
@@ -402,6 +430,8 @@ class IFTEOracle(BaseTEModel):
         p: array-like of shape (n_samples,)
             The treatment propensity
         """
+        self._check_inputs(w, p)
+
         # set EIF
         self._eif = _get_te_eif(self.setting)
 

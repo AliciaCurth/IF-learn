@@ -7,8 +7,8 @@ import pandas as pd
 import numpy as np
 
 from iflearn.treatment_effects.base import _get_po_plugin_function, _get_te_eif, \
-    eif_transformation_CATE, eif_transformation_RR, po_plugin_function_CATE, po_plugin_function_RR, CATE_NAME, \
-    RR_NAME, ht_te_transformation
+    eif_transformation_CATE, eif_transformation_RR, po_plugin_function_CATE, po_plugin_function_RR,\
+    CATE_NAME, RR_NAME, ht_te_transformation
 
 
 def test_settingscheck_eif_po():

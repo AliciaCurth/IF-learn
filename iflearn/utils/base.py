@@ -59,3 +59,35 @@ def clone(estimator, safe=True):
                                'either does not set or modifies parameter %s' %
                                (estimator, name))
     return new_object
+
+
+def check_estimator_has_method(estimator, needed_method: str, estimator_name: str,
+                               return_clone: bool = True):
+    """
+    Check that an estimator has a specific method
+
+    Parameters
+    ----------
+    estimator
+    needed_method
+    estimator_name
+    return_clone
+
+    Returns
+    -------
+
+    """
+    if hasattr(estimator, needed_method):
+        if return_clone:
+            return clone(estimator)
+        else:
+            pass
+    else:
+        raise ValueError('{} needs to implement method {}'.format(estimator_name, needed_method))
+
+
+def get_name_needed_prediction_method(binary_y):
+    if binary_y:
+        return 'predict_proba'
+    else:
+        return 'predict'

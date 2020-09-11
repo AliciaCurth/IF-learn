@@ -57,7 +57,7 @@ def _eval_one_setting_grf(train, test, n_train, n_test, num_trees=NUM_TREES_BASE
     r_out = r_get_te_predictions(r_x, r_y, r_w, r_p, r_x_test, num_trees=num_trees)
     out = pandas2ri.ri2py_dataframe(r_out).values
 
-    mses = [mean_squared_error(t_test, out[:, i]) for i in range(8)]
+    mses = [mean_squared_error(t_test, out[:, i]) for i in range(5)]
 
     return mses
 
@@ -95,12 +95,8 @@ def eval_setting_repeat_grf(n_train, num_trees=NUM_TREES_BASE, covariate_model=N
     cfnpscores = zipped_scores.pop(0)
     ifpscores = zipped_scores.pop(0)
     ifnpscores = zipped_scores.pop(0)
-    ifspscores = zipped_scores.pop(0)
-    ifsnpscores = zipped_scores.pop(0)
-    ifspwscores = zipped_scores.pop(0)
 
-    return plugscores, cfpscores, cfnpscores, ifpscores, ifnpscores, ifspscores, ifsnpscores, \
-           ifspwscores
+    return plugscores, cfpscores, cfnpscores, ifpscores, ifnpscores
 
 
 def eval_range_grf(range_dim, num_trees=NUM_TREES_BASE, dimension_range=True,
@@ -113,9 +109,8 @@ def eval_range_grf(range_dim, num_trees=NUM_TREES_BASE, dimension_range=True,
     Evaluate GRF perforamnce over a range of settings
     """
     resultframe = pd.DataFrame(columns=['plug_mean', 'cfp_mean', 'cfnp_mean', 'ifp_mean',
-                                        'ifnp_mean', 'ifsp_mean', 'ifsnp_mean', 'ifspw_mean',
-                                        'plug_sd', 'cfp_sd', 'cfnp_sd', 'ifp_sd', 'ifnp_sd',
-                                        'ifsp_sd', 'ifsnp_sd', 'ifspw_sd'])
+                                        'ifnp_mean',
+                                        'plug_sd', 'cfp_sd', 'cfnp_sd', 'ifp_sd', 'ifnp_sd'])
     if dimension_range:
         for d in range_dim:
             print('Ambient dimension: {}'.format(d))
