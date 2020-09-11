@@ -70,7 +70,6 @@ class GroupIFLearner(IFLearnerTE):
                                               base_estimator=self.base_estimator,
                                               setting=self.setting, binary_y=self.binary_y,
                                               propensity_estimator=self.propensity_estimator,
-                                              double_sample_split=self.double_sample_split,
                                               n_folds=self.n_folds,
                                               random_state=self.random_state)
         else:

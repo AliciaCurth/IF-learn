@@ -126,7 +126,7 @@ def eval_range_grf(range_dim, num_trees=NUM_TREES_BASE, dimension_range=True,
                                              verbose=verbose)
             # need possiblity for nans in case something goes wrong in small n regime
             means = [np.nanmean(np.array(x)) for x in scores]
-            sds = [np.nanstd(np.array(x)) / np.sqrt(repeats) for x in scores]
+            sds = [np.nanstd(np.array(x)) / np.sqrt(sum(~np.isnan(x))) for x in scores]
             resultframe.loc[d, :] = means + sds
     else:
         for n in range_dim:
@@ -143,7 +143,7 @@ def eval_range_grf(range_dim, num_trees=NUM_TREES_BASE, dimension_range=True,
                                              verbose=verbose)
             # need possiblity for nans in case something goes wrong in small n regime
             means = [np.nanmean(np.array(x)) for x in scores]
-            sds = [np.nanstd(np.array(x)) / np.sqrt(repeats) for x in scores]
+            sds = [np.nanstd(np.array(x)) / np.sqrt(sum(~np.isnan(x))) for x in scores]
             resultframe.loc[d, :] = means + sds
 
     return resultframe

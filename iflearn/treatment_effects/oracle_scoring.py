@@ -154,7 +154,16 @@ def fit_and_score_te_oracle(estimator, X, y, w, p, t, scorer, train, test,
 
     else:
         fit_time = time.time() - start_time
-        test_scores = _score(estimator, X_test, t_test, scorers)
+
+        try:
+            test_scores = _score(estimator, X_test, t_test, scorers)
+        except Exception:
+            if return_test_score_only:
+                if error_score == 'raise':
+                    raise
+                else:
+                    return np.nan
+
         score_time = time.time() - start_time - fit_time
 
         if return_test_score_only:

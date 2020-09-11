@@ -99,9 +99,6 @@ class RSmoothingSpline(BaseEstimator, RegressorMixin):
                             robjects.FloatVector(X)).rx2('y'))
         return y_spline
 
-# utils = importr('utils')
-# utils.install_packages('grf')
-
 
 # check if package is installed
 def _importr_tryhard(packname):
@@ -207,7 +204,7 @@ class RCausalForest(BaseTEModel):
         ----------
         X: array-like
             Test data
-        with_se: bool
+        return_se: bool
             Whether to return standard errors
 
         Returns
@@ -232,16 +229,3 @@ class RCausalForest(BaseTEModel):
             r_pred = self._grf.predict_causal_forest(self._estimator, newdata=r_x)
             r_pred = pandas2ri.ri2py_dataframe(r_pred).values
             return np.transpose(r_pred[0, :])
-
-
-# Selection bias class ---------------------------------------------
-class TwoSideBias:
-    """
-    Class implements selection bias as
-    """
-    def __init__(self, b=1, dim: int = 0):
-        self.b = b
-        self.dim = dim
-
-    def __call__(self, X, *args, **kwargs):
-        return 0.5 + 0.5 * self.b * np.sign(X[:, self.dim]) * X[:, self.dim]

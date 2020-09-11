@@ -243,3 +243,20 @@ def te_interaction_baseline(X, other_function=None, baseline=None):
         _check_is_callable(other_function, 'other function')
     X = _get_values_only(X)
     return other_function(X) * baseline(X)
+
+
+def propensity_model_2(X, b: float = 0.2, dim: int = 0):
+    """
+    Propensity model used in simulation setting 1.3
+
+    Parameters
+    ----------
+    X: array-like
+        input data to use
+    b: float
+        degree of selection bias
+    dim: int, default 0
+        Dimension of X to use
+    """
+    X = _get_values_only(X)
+    return 0.5 + 0.5 * b * np.sign(X[:, dim]) * X[:, dim]
