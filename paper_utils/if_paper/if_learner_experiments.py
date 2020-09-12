@@ -12,7 +12,7 @@ from iflearn.simulation_utils.base import BASE_BASELINE_MODEL, ModelCaller
 from iflearn.simulation_utils.treatment_effects import make_te_data, BASE_TE_MODEL, \
     propensity_model_2
 
-from iflearn.treatment_effects.base import CATE_NAME, RR_NAME
+from iflearn.treatment_effects.base import CATE_NAME
 from iflearn.treatment_effects.oracle_scoring import fit_and_score_te_oracle
 from iflearn.treatment_effects.base_learners import IFLearnerTE, IFTEOracle, PlugInTELearner, \
     TEOracle
@@ -21,6 +21,8 @@ METHOD_NAMES = {'t': 'T-learner',
                 'ot': 'T-Oracle',
                 'if': 'IF-learner',
                 'oif': 'Oracle IF-learner'}
+
+MSE_NAME = 'neg_mean_squared_error'
 N_TRAIN_BASE = 500
 N_TEST_BASE = 1000
 N_REPEATS_BASE = 500
@@ -47,28 +49,29 @@ def _eval_one_setting(base_estimator, train, test, n_train, n_test, d=1,
         baseline_model = BASE_BASELINE_MODEL
 
     if binary_y:
-        tscore = - fit_and_score_te_oracle(PlugInTELearner(base_estimator, setting=setting),
+        tscore = - fit_and_score_te_oracle(PlugInTELearner(base_estimator, setting=setting,
+                                                           binary_y=True),
                                            X, y, w, p, t,
                                            train=train,
                                            test=test,
-                                           scorer='neg_mean_squared_error',
+                                           scorer=MSE_NAME,
                                            return_test_score_only=True)
         toracle = TEOracle(te_model=te_function,
-                           base_model=baseline_model, setting=setting)
+                           base_model=baseline_model, setting=setting, binary_y=binary_y)
         otscore = - fit_and_score_te_oracle(toracle,
                                             X, y, w, p, t,
                                             train=train,
                                             test=test,
-                                            scorer='neg_mean_squared_error',
+                                            scorer=MSE_NAME,
                                             return_test_score_only=True)
 
         ifscore = - fit_and_score_te_oracle(IFLearnerTE(base_estimator=base_estimator,
-                                                        setting=setting,
+                                                        setting=setting, binary_y=binary_y,
                                                         te_estimator=te_estimator),
                                             X, y, w, p, t,
                                             train=train,
                                             test=test,
-                                            scorer='neg_mean_squared_error',
+                                            scorer=MSE_NAME,
                                             return_test_score_only=True)
 
         oifscore = - fit_and_score_te_oracle(IFTEOracle(te_estimator, te_model=te_function,
@@ -77,14 +80,14 @@ def _eval_one_setting(base_estimator, train, test, n_train, n_test, d=1,
                                              X, y, w, p, t,
                                              train=train,
                                              test=test,
-                                             scorer='neg_mean_squared_error',
+                                             scorer=MSE_NAME,
                                              return_test_score_only=True)
 
     else:
         tscore = - fit_and_score_te_oracle(PlugInTELearner(base_estimator), X, y, w, p, t,
                                            train=train,
                                            test=test,
-                                           scorer='neg_mean_squared_error',
+                                           scorer=MSE_NAME,
                                            return_test_score_only=True)
         otscore = - fit_and_score_te_oracle(TEOracle(te_model=te_function,
                                                      base_model=baseline_model,
@@ -92,13 +95,13 @@ def _eval_one_setting(base_estimator, train, test, n_train, n_test, d=1,
                                             X, y, w, p, t,
                                             train=train,
                                             test=test,
-                                            scorer='neg_mean_squared_error',
+                                            scorer=MSE_NAME,
                                             return_test_score_only=True)
 
         ifscore = - fit_and_score_te_oracle(IFLearnerTE(base_estimator), X, y, w, p, t,
                                             train=train,
                                             test=test,
-                                            scorer='neg_mean_squared_error',
+                                            scorer=MSE_NAME,
                                             return_test_score_only=True)
 
         oifscore = - fit_and_score_te_oracle(IFTEOracle(base_estimator, te_model=te_function,
@@ -106,7 +109,7 @@ def _eval_one_setting(base_estimator, train, test, n_train, n_test, d=1,
                                              X, y, w, p, t,
                                              train=train,
                                              test=test,
-                                             scorer='neg_mean_squared_error',
+                                             scorer=MSE_NAME,
                                              return_test_score_only=True)
     scores = tscore, otscore, ifscore, oifscore
     for score in scores:
@@ -250,3 +253,4 @@ def make_plot_frame(results, methods=METHOD_NAMES, dim_name='n'):
     plot_frame['meanmse'] = plot_frame['meanmse'] * 1000
 
     return plot_frame.astype(convert_dict)
+

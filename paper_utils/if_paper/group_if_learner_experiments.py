@@ -13,7 +13,7 @@ from iflearn.simulation_utils.treatment_effects import make_te_data
 
 from iflearn.treatment_effects.base import CATE_NAME, RR_NAME
 from iflearn.treatment_effects.oracle_scoring import fit_and_score_te_oracle
-from iflearn.treatment_effects.group_learner import GroupIFLearner
+from iflearn.treatment_effects.group_learner import GroupIFLearnerTE
 
 N_TEST_BASE = 1000
 N_REPEATS_BASE = 500
@@ -39,12 +39,12 @@ def _eval_one_group_setting(te_estimator, train, test, n_train, n_test, d=1,
                                     seedy=seedy, selection_bias=selection_bias)
 
     if setting == CATE_NAME:
-        cherscore = - fit_and_score_te_oracle(GroupIFLearner(te_estimator=te_estimator,
-                                                             base_estimator=baseline_estimator,
-                                                             setting=setting,
-                                                             plug_in_corrected=False,
-                                                             baseline_adjustment=True,
-                                                             efficient_est=True),
+        cherscore = - fit_and_score_te_oracle(GroupIFLearnerTE(te_estimator=te_estimator,
+                                                               base_estimator=baseline_estimator,
+                                                               setting=setting,
+                                                               plug_in_corrected=False,
+                                                               baseline_adjustment=True,
+                                                               aipw_est=False),
                                               X, y, w, p, t,
                                               train=train,
                                               test=test,
@@ -53,42 +53,42 @@ def _eval_one_group_setting(te_estimator, train, test, n_train, n_test, d=1,
     else:
         cherscore = np.nan
 
-    tscore = - fit_and_score_te_oracle(GroupIFLearner(te_estimator=te_estimator,
-                                                      base_estimator=baseline_estimator,
-                                                      setting=setting,
-                                                      plug_in_corrected=False,
-                                                      baseline_adjustment=False),
+    tscore = - fit_and_score_te_oracle(GroupIFLearnerTE(te_estimator=te_estimator,
+                                                        base_estimator=baseline_estimator,
+                                                        setting=setting,
+                                                        plug_in_corrected=False,
+                                                        baseline_adjustment=False),
                                        X, y, w, p, t,
                                        train=train,
                                        test=test,
                                        scorer=MSE_NAME,
                                        return_test_score_only=True)
-    tadjscore = - fit_and_score_te_oracle(GroupIFLearner(te_estimator=te_estimator,
-                                                         base_estimator=baseline_estimator,
-                                                         setting=setting,
-                                                         plug_in_corrected=False,
-                                                         baseline_adjustment=True),
+    tadjscore = - fit_and_score_te_oracle(GroupIFLearnerTE(te_estimator=te_estimator,
+                                                           base_estimator=baseline_estimator,
+                                                           setting=setting,
+                                                           plug_in_corrected=False,
+                                                           baseline_adjustment=True),
                                           X, y, w, p, t,
                                           train=train,
                                           test=test,
                                           scorer=MSE_NAME,
                                           return_test_score_only=True)
-    ifscore = - fit_and_score_te_oracle(GroupIFLearner(te_estimator=te_estimator,
-                                                       base_estimator=baseline_estimator,
-                                                       setting=setting,
-                                                       plug_in_corrected=True,
-                                                       baseline_adjustment=False),
+    ifscore = - fit_and_score_te_oracle(GroupIFLearnerTE(te_estimator=te_estimator,
+                                                         base_estimator=baseline_estimator,
+                                                         setting=setting,
+                                                         plug_in_corrected=True,
+                                                         baseline_adjustment=False),
                                         X, y, w, p, t,
                                         train=train,
                                         test=test,
                                         scorer=MSE_NAME,
                                         return_test_score_only=True)
 
-    ifscoreadj = - fit_and_score_te_oracle(GroupIFLearner(te_estimator=te_estimator,
-                                                          base_estimator=baseline_estimator,
-                                                          setting=setting,
-                                                          plug_in_corrected=True,
-                                                          baseline_adjustment=True),
+    ifscoreadj = - fit_and_score_te_oracle(GroupIFLearnerTE(te_estimator=te_estimator,
+                                                            base_estimator=baseline_estimator,
+                                                            setting=setting,
+                                                            plug_in_corrected=True,
+                                                            baseline_adjustment=True),
                                            X, y, w, p, t,
                                            train=train,
                                            test=test,
@@ -178,3 +178,4 @@ def eval_range_n_group(te_estimator, range_n, repeats=1000, n_test=1000, d=1,
         resultframe.loc[n, :] = np.concatenate((means, sds))
 
     return resultframe
+

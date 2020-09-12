@@ -5,13 +5,13 @@ effects with known propensity scores
 """
 import numpy as np
 import pandas as pd
-import statsmodels as sm
+import statsmodels.api as sm
 
 from .base import CATE_NAME, ht_te_transformation
 from .base_learners import IFLearnerTE, PlugInTELearner
 
 
-class GroupIFLearner(IFLearnerTE):
+class GroupIFLearnerTE(IFLearnerTE):
     """
     Class implementing the Group-IF-learner from Curth, Alaa and van der Schaar (2020) for
     treatment effect estimation.
@@ -32,8 +32,8 @@ class GroupIFLearner(IFLearnerTE):
         Whether to use plug-in bias-corrected first stage model for grouping (IF-learner)
     baseline_adjustment: bool, default True
         Whether to use baseline adjustment in Second stage (for improved precision)
-    efficient_est: bool, default True
-        Whether to use efficient second stage estimator. If False and setting 'CATE', will use
+    aipw_est: bool, default True
+        Whether to use aipw as second stage estimator. If False and setting 'CATE', will use
         Chernozhukov et al. (2018)'s estimator instead
     honest: bool, default True
         Whether to perform honest estimation by splitting data in auxiliary and estimation sample
@@ -48,33 +48,36 @@ class GroupIFLearner(IFLearnerTE):
     def __init__(self, te_estimator, base_estimator=None,
                  setting=CATE_NAME, binary_y: bool = False,
                  plug_in_corrected: bool = True, baseline_adjustment: bool = True,
-                 efficient_est: bool = True, honest: bool = False,
-                 n_folds=10, random_state=42, n_groups: int = 5, ):
+                 aipw_est: bool = True, honest: bool = True,
+                 n_folds=10, random_state=42, n_groups: int = 5):
+        # initialise super (IF-learner)
         super().__init__(te_estimator=te_estimator, fit_base_model=baseline_adjustment,
                          base_estimator=base_estimator, fit_propensity_model=False,
                          n_folds=n_folds, setting=setting, binary_y=binary_y,
                          random_state=random_state)
+        # set group specific parameters
         self.n_groups = n_groups
         self.plug_in_corrected = plug_in_corrected
         self.baseline_adjustment = baseline_adjustment
-        self.efficient_est = efficient_est
+        self.aipw_est = aipw_est
         self.honest = honest
 
     def _prepare_self(self):
         # clean up
         super()._prepare_self()
 
-        # make a learner IFLearner within this learner
+        # set first stage model
         if self.plug_in_corrected:
-            self._plug_in_model = IFLearnerTE(te_estimator=self.te_estimator, fit_base_model=True,
-                                              base_estimator=self.base_estimator,
-                                              setting=self.setting, binary_y=self.binary_y,
-                                              propensity_estimator=self.propensity_estimator,
-                                              n_folds=self.n_folds,
-                                              random_state=self.random_state)
+            self._first_stage_model = IFLearnerTE(te_estimator=self.te_estimator,
+                                                  fit_base_model=True,
+                                                  base_estimator=self.base_estimator,
+                                                  setting=self.setting, binary_y=self.binary_y,
+                                                  propensity_estimator=self.propensity_estimator,
+                                                  n_folds=self.n_folds,
+                                                  random_state=self.random_state)
         else:
-            self._plug_in_model = PlugInTELearner(base_estimator=self.base_estimator,
-                                                  setting=self.setting)
+            self._first_stage_model = PlugInTELearner(base_estimator=self.base_estimator,
+                                                      setting=self.setting)
 
     def _fit(self, X, y, w, p=None):
         n = len(y)
@@ -92,7 +95,7 @@ class GroupIFLearner(IFLearnerTE):
             n = X.shape[0]
 
         # plug-in step
-        self._plug_in_model.fit(X, y, w, p)
+        self._first_stage_model.fit(X, y, w, p)
 
         # given thresholds compute taus -- either honest or not
         if self.honest:
@@ -100,27 +103,6 @@ class GroupIFLearner(IFLearnerTE):
             X, y, w, p = X_est, y_est, w_est, p_est
 
         self._calc_taus(X, y, w, p)
-
-    def _get_te_and_set_thresholds(self, X):
-
-        # determine groups on basis of treatment effects
-        te = self._plug_in_model.predict(X)
-
-        # determine quantiles
-        thresholds = np.quantile(te,
-                                 q=np.linspace(0, 1, self.n_groups + 1))[1:self.n_groups]
-
-        # in case there are constants
-        self._thresholds = np.unique(thresholds)
-
-        if self._thresholds[-1] == max(te):
-            # for the case that there will be an empty final group
-            self._thresholds = self._thresholds[:-1]
-
-        # count groups
-        self.n_groups = len(self._thresholds) + 1
-
-        return te
 
     def _calc_taus(self, X, y, w, p):
 
@@ -134,12 +116,13 @@ class GroupIFLearner(IFLearnerTE):
         n_g = np.zeros(self.n_groups)
         n_t = np.zeros(self.n_groups)
 
-        if not self.efficient_est:
+        if not self.aipw_est:
+            # create group indicators for GATES
             group_indicators = np.zeros((len(y), self.n_groups), dtype=int)
 
         if self.baseline_adjustment:
             # get regression adjustment terms
-            _, mu_0, mu_1 = self._plug_in_model.predict(X, return_po=True)
+            _, mu_0, mu_1 = self._first_stage_model.predict(X, return_po=True)
 
         # compute taus for first k-1 groups
         for i in range(self.n_groups - 1):
@@ -151,7 +134,7 @@ class GroupIFLearner(IFLearnerTE):
                     'cannot compute the group effect'.format(i + 1))
 
             if self.baseline_adjustment:
-                if self.efficient_est:
+                if self.aipw_est:
                     taus[i] = self._group_tau(y[member], w[member], p[member], mu_0[member],
                                               mu_1[member])
                     tau_vars[i] = self._group_var(y[member], w[member], p[member], mu_0[member],
@@ -178,7 +161,7 @@ class GroupIFLearner(IFLearnerTE):
         n_t[self.n_groups - 1] = np.sum(w[~grouped])
 
         if self.baseline_adjustment:
-            if self.efficient_est:
+            if self.aipw_est:
                 taus[self.n_groups - 1] = self._group_tau(y[~grouped], w[~grouped],
                                                           p[~grouped], mu_0[~grouped],
                                                           mu_1[~grouped])
@@ -193,70 +176,47 @@ class GroupIFLearner(IFLearnerTE):
 
         else:
             taus[self.n_groups - 1] = self._group_tau(y[~grouped], w[~grouped],
-                                                      p[~grouped], None, None)
+                                                      p[~grouped])
             tau_vars[self.n_groups - 1] = self._group_var(y[~grouped], w[~grouped],
-                                                          p[~grouped], None, None)
+                                                          p[~grouped])
 
-        if self.efficient_est or not self.baseline_adjustment:
-            # then treatment effects are not yet saved
-            if np.isnan(taus).any():
-                raise ValueError('One or more of the within-group treatment effects could not be '
-                                 'computed.')
+        if self.aipw_est or not self.baseline_adjustment:
+            # save treatment effect
             self._taus = taus
             self._tau_var = tau_vars
 
+        # save group counts
         self._n_g = n_g
         self._n_t = n_t
 
-    def _calc_taus_GATES(self, y, w, p, group_indicators, mu_0):
-        # do regression adjustment as suggested in Chernozhukov et al (2018)
-        orthogonal_treat = w - p
-        orthogonal_group = group_indicators * orthogonal_treat[:, np.newaxis]
-        weights = 1 / (p * (1 - p))
+        # final check
+        if np.isnan(self._taus).any():
+            raise ValueError('One or more of the within-group treatment '
+                             'effects could not be computed.')
 
-        X = pd.DataFrame(np.c_[orthogonal_group, mu_0])
-        wls_model = sm.WLS(y, X, weights=weights)
-        res = wls_model.fit()
-        self._taus = res.params[:self.n_groups]
+    def _get_te_and_set_thresholds(self, X):
 
-    def predict(self, X, return_po=False):
-        """
-        Get group-wise treatment effects for new set of data
+        # determine groups on basis of treatment effects
+        te = self._first_stage_model.predict(X)
 
-        Parameters
-        ----------
-        X: array-like of shape (n_samples, n_features)
-            Test-sample features
-        return_po: bool, default False
-            Whether to return potential outcome predictions
+        # determine quantiles
+        thresholds = np.quantile(te, q=np.linspace(0, 1,
+                                 self.n_groups + 1))[1:self.n_groups]
 
-        Returns
-        -------
-        te_est: array-like of shape (n_samples,)
-            Predicted treatment effects
-        """
-        if return_po:
-            raise NotImplementedError('Group-IF-Learners have no po-model')
+        # in case there are equal quantiles
+        self._thresholds = np.unique(thresholds)
 
-        # predict treatment effects
-        n = X.shape[0]
-        tau_tilde = self._plug_in_model.predict(X)
+        if self._thresholds[-1] == max(te):
+            # for the case that there will be an empty final group
+            self._thresholds = self._thresholds[:-1]
 
-        te_est = np.zeros(n)
-        grouped = np.zeros(n, dtype=bool)
+        # count groups
+        self.n_groups = len(self._thresholds) + 1
 
-        # get predictions
-        for i in range(self.n_groups - 1):
-            member = (tau_tilde < self._thresholds[i]) & (~grouped)
-            te_est[member] = self._taus[i]
-            grouped[member] = True
-
-        # assign last people to highest group
-        te_est[~grouped] = self._taus[self.n_groups - 1]
-
-        return te_est
+        return te
 
     def _group_tau(self, y, w, p=None, mu_0=None, mu_1=None):
+        # calculate within group treatment effects using EIF or HT estimator
         if np.sum(1 - w) == 0 or np.sum(w) == 0:
             raise ValueError('Only one group is present, cannot compute group-TE')
         if self.baseline_adjustment:
@@ -270,15 +230,78 @@ class GroupIFLearner(IFLearnerTE):
                 return np.average(ht_te_transformation(y, w, p))
 
     def _group_var(self, y, w, p=None, mu_0=None, mu_1=None):
+        # calculate within group variance
         if np.sum(1 - w) == 0 or np.sum(w) == 0:
             raise ValueError('Only one group is present, cannot compute variance of group-TE')
+
         n = len(w)
         if self.baseline_adjustment:
             return 1 / n * np.var(self._eif(y=y, w=w, p=p, mu_0=mu_0, mu_1=mu_1))
         else:
             if self.setting == 'RR':
+                # not implemented
                 return np.nan
             return 1 / n * np.var(ht_te_transformation(y, w, p))
+
+    def _calc_taus_GATES(self, y, w, p, group_indicators, mu_0):
+        # do regression adjustment as suggested in Chernozhukov et al (2018)
+        orthogonal_treat = w - p
+        orthogonal_group = group_indicators * orthogonal_treat[:, np.newaxis]
+        weights = 1 / (p * (1 - p))
+
+        X = pd.DataFrame(np.c_[orthogonal_group, mu_0])
+        wls_model = sm.WLS(y, X, weights=weights)
+        res = wls_model.fit()
+        self._taus = res.params[:self.n_groups].values
+        self._tau_var = np.sqrt(res.cov_params().values.diagonal())[:self.n_groups]
+
+    def predict(self, X, return_po: bool = False, return_se: bool = False):
+        """
+        Get group-wise treatment effects for new set of data
+
+        Parameters
+        ----------
+        X: array-like of shape (n_samples, n_features)
+            Test-sample features
+        return_po: bool, default False
+            Whether to return potential outcome predictions
+        return_se: bool, default False
+            Whether to return standard errors
+
+        Returns
+        -------
+        te_est: array-like of shape (n_samples,)
+            Predicted treatment effects
+        te_sd: (optional) array-like of shape (n_samples,)
+            Standard errors associated with estimates
+        """
+        if return_po:
+            raise NotImplementedError('Group-IF-Learners have no po-model')
+
+        # predict treatment effects
+        n = X.shape[0]
+        tau_tilde = self._first_stage_model.predict(X)
+
+        te_est, te_sd = np.zeros(n), np.zeros(n)
+        grouped = np.zeros(n, dtype=bool)
+
+        # get predictions
+        for i in range(self.n_groups - 1):
+            member = (tau_tilde < self._thresholds[i]) & (~grouped)
+            grouped[member] = True
+            te_est[member] = self._taus[i]
+            if return_se:
+                te_sd[member] = self._tau_var[i]
+
+        # assign last people to highest group
+        te_est[~grouped] = self._taus[self.n_groups - 1]
+
+        if return_se:
+            # get final SE and return with SE
+            te_sd[~grouped] = self._tau_var[self.n_groups - 1]
+            return te_est, te_sd
+
+        return te_est
 
 
 def rr_from_means(y, w, p):

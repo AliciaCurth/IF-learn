@@ -10,7 +10,7 @@ from sklearn.metrics import mean_squared_error
 from iflearn.simulation_utils.treatment_effects import make_te_data
 from iflearn.treatment_effects.oracle_scoring import _safe_split_te
 
-from paper_simulations.if_paper.if_learner_experiments import N_REPEATS_BASE, N_TRAIN_BASE, \
+from paper_utils.if_paper.if_learner_experiments import N_REPEATS_BASE, N_TRAIN_BASE, \
     N_TEST_BASE
 
 # rpy2 needs pandas < 1.0.0 due to deprecation of pd.from_items()
@@ -22,6 +22,7 @@ rpy2.robjects.numpy2ri.activate()
 pandas2ri.activate()
 
 NUM_TREES_BASE = 2000
+PAPER_UTILS_ROOT = 'paper_utils/if_paper/'
 
 
 def _eval_one_setting_grf(train, test, n_train, n_test, num_trees=NUM_TREES_BASE, d=1,
@@ -29,7 +30,7 @@ def _eval_one_setting_grf(train, test, n_train, n_test, num_trees=NUM_TREES_BASE
                           propensity_model=None, covariate_model=None,
                           error_model=None, binary_y=False,
                           selection_bias=None,
-                          seedy=42, root='paper_simulations/if_paper/'):
+                          seedy=42, root=PAPER_UTILS_ROOT):
     # get data
     np.random.seed(seedy)
     X, y, w, t, p, _ = make_te_data(n=n_train + n_test, d=d, te_model=te_function,
@@ -67,7 +68,7 @@ def eval_setting_repeat_grf(n_train, num_trees=NUM_TREES_BASE, covariate_model=N
                             te_function=None, baseline_model=None, selection_bias=None,
                             propensity_model=None, error_model=None,
                             pre_dispatch='2*n_jobs', n_jobs=1, verbose=0,
-                            root='paper_simulations/if_paper/'):
+                            root=PAPER_UTILS_ROOT):
     """
     Function repeatedly evaluates a setting
     """
