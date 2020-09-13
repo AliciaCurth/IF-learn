@@ -122,7 +122,7 @@ def make_te_data(n: int = 1000, d: int = 1, setting=CATE_NAME, covariate_model=N
 
 # Models from other papers -------------------------------------------------------
 # Kennedy (2020) -----------------------------------------------------------------
-def simple_propensity_model(X, dim: int = 0):
+def propensity_kennedy(X, dim: int = 0):
     """
     Propensity score used in Kennedy (2020)
 
