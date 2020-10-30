@@ -6,9 +6,9 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from iflearn.treatment_effects.base import _get_po_plugin_function, _get_te_eif, \
+from iflearn.treatment_effects.transformations import _get_po_plugin_function, _get_te_eif, \
     eif_transformation_CATE, eif_transformation_RR, po_plugin_function_CATE, po_plugin_function_RR,\
-    CATE_NAME, RR_NAME, ht_te_transformation
+    CATE_NAME, RR_NAME, ht_transformation_CATE
 
 
 def test_settingscheck_eif_po():
@@ -85,6 +85,6 @@ def test_eifs():
 
     # horvitz thompson transformation
     ht_true = np.array([2 / 0.5, -2 / 0.5])
-    ht_test = ht_te_transformation(y, w, p)
+    ht_test = ht_transformation_CATE(y, w, p)
     np.testing.assert_almost_equal(ht_test, ht_true)
 

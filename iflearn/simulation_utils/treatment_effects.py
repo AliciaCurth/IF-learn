@@ -7,7 +7,7 @@ from scipy.stats import beta
 
 from .base import BASE_BASELINE_MODEL, BASE_COVARIATE_MODEL, BASE_ERROR_MODEL, constant_baseline,\
     _get_values_only, _check_is_callable, baseline_wa
-from ..treatment_effects.base import _get_po_plugin_function, CATE_NAME
+from ..treatment_effects.transformations import _get_po_plugin_function, CATE_NAME
 BASE_TE_MODEL = constant_baseline
 
 

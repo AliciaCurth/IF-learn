@@ -12,7 +12,7 @@ from iflearn.simulation_utils.base import BASE_BASELINE_MODEL, ModelCaller
 from iflearn.simulation_utils.treatment_effects import make_te_data, BASE_TE_MODEL, \
     propensity_model_2
 
-from iflearn.treatment_effects.base import CATE_NAME
+from iflearn.treatment_effects.transformations import CATE_NAME
 from iflearn.treatment_effects.oracle_scoring import fit_and_score_te_oracle
 from iflearn.treatment_effects.base_learners import IFLearnerTE, IFTEOracle, PlugInTELearner, \
     TEOracle
@@ -84,7 +84,8 @@ def _eval_one_setting(base_estimator, train, test, n_train, n_test, d=1,
                                              return_test_score_only=True)
 
     else:
-        tscore = - fit_and_score_te_oracle(PlugInTELearner(base_estimator), X, y, w, p, t,
+        tscore = - fit_and_score_te_oracle(PlugInTELearner(base_estimator, setting=setting),
+                                           X, y, w, p, t,
                                            train=train,
                                            test=test,
                                            scorer=MSE_NAME,
@@ -98,14 +99,15 @@ def _eval_one_setting(base_estimator, train, test, n_train, n_test, d=1,
                                             scorer=MSE_NAME,
                                             return_test_score_only=True)
 
-        ifscore = - fit_and_score_te_oracle(IFLearnerTE(base_estimator), X, y, w, p, t,
+        ifscore = - fit_and_score_te_oracle(IFLearnerTE(base_estimator, setting=setting),
+                                            X, y, w, p, t,
                                             train=train,
                                             test=test,
                                             scorer=MSE_NAME,
                                             return_test_score_only=True)
 
         oifscore = - fit_and_score_te_oracle(IFTEOracle(base_estimator, te_model=te_function,
-                                                        base_model=baseline_model),
+                                                        base_model=baseline_model, setting=setting),
                                              X, y, w, p, t,
                                              train=train,
                                              test=test,

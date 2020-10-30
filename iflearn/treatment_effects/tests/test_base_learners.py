@@ -5,7 +5,7 @@ Tests for iflearn.treatment_effects.base_learners
 import pytest
 import numpy as np
 
-from iflearn.treatment_effects.base import eif_transformation_CATE, RR_NAME
+from iflearn.treatment_effects.transformations import eif_transformation_CATE, RR_NAME
 from iflearn.treatment_effects.base_learners import BaseTEModel, PlugInTELearner, IFLearnerTE, \
     TEOracle, IFTEOracle
 from iflearn.simulation_utils.base import binary_gyorfi_baseline

@@ -4,6 +4,7 @@ Module contains base learners for treatment effect estimation (as described in C
 van der Schaar (2020), namely
 - Plug-in learners (also known as T-learners in the CATE setting)
 - IF-learners (also known as DR-learners in the CATE setting)
+- HT-learners (learners using pseudo-outcomes based on the Horvitz-Thompson transformation)
 - Oracle estimators
 """
 import abc
@@ -14,7 +15,7 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.base import BaseEstimator, RegressorMixin
 
 from ..utils.base import clone, check_estimator_has_method, get_name_needed_prediction_method
-from .base import CATE_NAME, _get_po_plugin_function, _get_te_eif
+from .transformations import CATE_NAME, _get_po_plugin_function, _get_te_eif, _get_ht_transformation
 
 
 class BaseTEModel(BaseEstimator, RegressorMixin, abc.ABC):
@@ -80,7 +81,7 @@ class PlugInTELearner(BaseTEModel):
 
     def fit(self, X, y, w, p=None):
         """
-        Fit plug-in models .
+        Fit plug-in models.
 
         Parameters
         ----------
@@ -132,6 +133,142 @@ class PlugInTELearner(BaseTEModel):
             return te_est
 
 
+class HTLearnerTE(BaseTEModel):
+    """
+    Class implementing a learner based on the Horvitz-Thompson transformed outcome
+
+    Parameters
+    ----------
+    te_estimator: estimator
+        estimator for second stage
+    setting: str or callable, default 'CATE'
+        The treatment effect setting to be considered. Currently built-in support for 'CATE' or
+        'PO1' and 'PO0'. Can also pass a callable that is another transformation.
+    fit_propensity_model: bool, default False
+        Whether to fit a propensity model. If not, propensity scores have to be passed.
+    propensity_estimator: estimator, default None
+        estimator for propensity scores. Needed only if fit_propensity_model is True
+    n_folds: int, default 10
+        Number of cross-fitting folds
+    random_state: int, default 42
+        random state to use for cross-fitting splits
+    """
+    def __init__(self, te_estimator, propensity_estimator=None,
+                 setting=CATE_NAME, fit_propensity_model: bool = False,
+                 n_folds: int = 10, random_state: int = 42):
+        # set estimators
+        self.te_estimator = te_estimator
+        self.fit_propensity_model = fit_propensity_model
+        if fit_propensity_model and propensity_estimator is None:
+            raise ValueError('Need to pass propensity estimator when it should be fitted.')
+        self.propensity_estimator = propensity_estimator
+
+        # set other arguments
+        self.setting = setting
+        self.n_folds = n_folds
+        self.random_state = random_state
+
+    def _prepare_self(self):
+        # check that all estimators have the attributes they should have and clone them to be safe
+        if self.propensity_estimator is not None:
+            self.propensity_estimator = check_estimator_has_method(self.propensity_estimator,
+                                                                   'predict_proba',
+                                                                   'propensity_estimator')
+        self._ht_transformation = _get_ht_transformation(self.setting)
+
+    def _propensity_step(self, X, y, w, fit_mask, pred_mask):
+        # split sample
+        X_fit, Y_fit, W_fit = X[fit_mask, :], y[fit_mask], w[fit_mask]
+
+        temp_propensity_estimator = clone(self.propensity_estimator)
+        temp_propensity_estimator.fit(X_fit, W_fit)
+        p_pred = temp_propensity_estimator.predict_proba(X[pred_mask, :])
+        return p_pred
+
+    def _pseudo_outcome_step(self, X, y, w, p):
+        # create transformed outcome based on efficient influence function
+        transformed_outcome = self._ht_transformation(y, w, p)
+        self.te_estimator.fit(X, transformed_outcome)
+
+    def fit(self, X, y, w, p=None):
+        """
+        Fit two stages of pseudo-outcome regression to get treatment effect estimators
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            The features to fit to
+        y : array-like of shape (n_samples,) or (n_samples, )
+            The outcome variable
+        w: array-like of shape (n_samples,)
+            The treatment indicator
+        p: array-like of shape (n_samples,)
+            The treatment propensity
+        """
+        self._prepare_self()
+        self._check_inputs(w, p)
+        self._fit(X, y, w, p)
+
+    def _fit(self, X, y, w, p=None):
+        n = len(y)
+
+        if p is None and not self.fit_propensity_model:
+            # assume equal probabilities
+            p = 0.5 * np.ones(n)
+
+        # STEP 1: fit propensity estimator via cross-fitting
+        if self.fit_propensity_model:
+            if self.n_folds == 1:
+                # no cross-fitting (not recommended)
+                warnings.warn("You chose to not use cross-fitting. This is not recommended.")
+                pred_mask = np.ones(n, dtype=bool)
+                # fit plug-in te_estimator
+                p_pred = self._propensity_step(X, y, w, pred_mask, pred_mask)
+
+            else:
+                p_pred = np.zeros(n)
+
+                # create folds stratified by treatment assignment to ensure balance
+                splitter = StratifiedKFold(n_splits=self.n_folds, shuffle=True,
+                                           random_state=self.random_state)
+
+                for train_index, test_index in splitter.split(X, w):
+                    # create masks
+                    pred_mask = np.zeros(n, dtype=bool)
+                    pred_mask[test_index] = 1
+
+                    # fit plug-in te_estimator
+                    p_pred[pred_mask] = self._propensity_step(X, y, w, ~pred_mask, pred_mask)
+
+        if self.fit_propensity_model:
+            # use estimated propensity scores
+            p = p_pred
+
+        # STEP 2: bias correction
+        self._pseudo_outcome_step(X, y, w, p)
+
+    def predict(self, X, return_po=False):
+        """
+        Predict treatment effects
+
+        Parameters
+        ----------
+        X: array-like of shape (n_samples, n_features)
+            Test-sample features
+        return_po: bool, default False
+            Whether to return potential outcome predictions
+
+        Returns
+        -------
+        te_est: array-like of shape (n_samples,)
+            Predicted treatment effects
+        """
+        if return_po:
+            raise ValueError("HT-learner does not support parameter return_po")
+
+        return self.te_estimator.predict(X)
+
+
 class IFLearnerTE(BaseTEModel):
     """
     Class implementing the IF-learner of Curth, Alaa and van der Schaar (2020) for the special
@@ -180,6 +317,8 @@ class IFLearnerTE(BaseTEModel):
             self.base_estimator = base_estimator
 
         self.fit_propensity_model = fit_propensity_model
+        if fit_propensity_model and propensity_estimator is None:
+            raise ValueError('Need to pass propensity estimator when it should be fitted.')
         self.propensity_estimator = propensity_estimator
 
         # set other arguments

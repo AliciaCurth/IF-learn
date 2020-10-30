@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
-from .base import CATE_NAME, ht_te_transformation
+from .transformations import CATE_NAME, ht_transformation_CATE
 from .base_learners import IFLearnerTE, PlugInTELearner
 
 
@@ -227,7 +227,7 @@ class GroupIFLearnerTE(IFLearnerTE):
             if self.setting == 'RR':
                 return rr_from_means(y, w, p)
             else:
-                return np.average(ht_te_transformation(y, w, p))
+                return np.average(ht_transformation_CATE(y, w, p))
 
     def _group_var(self, y, w, p=None, mu_0=None, mu_1=None):
         # calculate within group variance
@@ -241,7 +241,7 @@ class GroupIFLearnerTE(IFLearnerTE):
             if self.setting == 'RR':
                 # not implemented
                 return np.nan
-            return 1 / n * np.var(ht_te_transformation(y, w, p))
+            return 1 / n * np.var(ht_transformation_CATE(y, w, p))
 
     def _calc_taus_GATES(self, y, w, p, group_indicators, mu_0):
         # do regression adjustment as suggested in Chernozhukov et al (2018)

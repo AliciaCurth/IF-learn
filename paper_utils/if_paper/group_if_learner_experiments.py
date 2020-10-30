@@ -11,7 +11,7 @@ from iflearn.utils.base import clone
 from iflearn.simulation_utils.base import BASE_BASELINE_MODEL
 from iflearn.simulation_utils.treatment_effects import make_te_data
 
-from iflearn.treatment_effects.base import CATE_NAME, RR_NAME
+from iflearn.treatment_effects.transformations import CATE_NAME, RR_NAME
 from iflearn.treatment_effects.oracle_scoring import fit_and_score_te_oracle
 from iflearn.treatment_effects.group_learner import GroupIFLearnerTE
 
